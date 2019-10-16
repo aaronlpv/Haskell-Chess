@@ -1,7 +1,7 @@
+import Data.Array
 import Data.Char (isDigit, toLower, toUpper)
-import Data.String (unwords)
 import Data.List (unfoldr)
-import Data.Array.IArray
+import Data.String (unwords)
 
 type Command = String
 
@@ -22,13 +22,13 @@ data PieceType
   | King
   deriving (Read, Enum, Eq, Ord, Show)
 
-pieceShow :: PieceType -> String
-pieceShow Pawn = "p"
-pieceShow Rook = "r"
-pieceShow Knight = "n"
-pieceShow Bishop = "b"
-pieceShow Queen = "q"
-pieceShow King = "k"
+kindShow :: PieceType -> String
+kindShow Pawn = "p"
+kindShow Rook = "r"
+kindShow Knight = "n"
+kindShow Bishop = "b"
+kindShow Queen = "q"
+kindShow King = "k"
 
 data Player
   = Black
@@ -47,10 +47,14 @@ data Piece =
   deriving (Eq)
 
 instance Show Piece where
-  show (Piece Black r) = pieceShow r
-  show (Piece White r) = map toUpper $ pieceShow r
+  show (Piece Black r) = kindShow r
+  show (Piece White r) = map toUpper $ kindShow r
 
-type Board = [[Maybe Piece]]
+showTile :: Maybe Piece -> String
+showTile Nothing = "."
+showTile (Just p) = (show p)
+
+type Board = Array Int (Maybe Piece)
 
 data State =
   State
@@ -73,50 +77,48 @@ readMove [c1, c2, c3, c4]
     digitToInt c = fromEnum c - fromEnum '1'
 readMove _ = Nothing
 
-rowOf :: Maybe Piece -> [Maybe Piece]
-rowOf = replicate 8
-
 order :: [PieceType]
-order = [Rook, Knight, Bishop, King, Queen, Bishop, Knight, Rook]
+order = [Rook, Knight, Bishop, Queen, King, Bishop, Knight, Rook]
+
+rowsOf :: Int -> Maybe Piece -> [Maybe Piece]
+rowsOf n = replicate (n * 8)
 
 board0 :: Board
 board0 =
-  [map (Just . Piece White) order, rowOf $ Just (Piece White Pawn)] ++
-  replicate 4 (rowOf Nothing) ++
-  [rowOf $ Just (Piece Black Pawn), map (Just . Piece Black) order]
+  listArray
+    (0, 63)
+    (map (Just . Piece White) order ++
+     1 `rowsOf` Just (Piece White Pawn) ++
+     4 `rowsOf` Nothing ++
+     1 `rowsOf` Just (Piece Black Pawn) ++
+     map (Just . Piece Black) order)
 
-rotateBoard :: Board -> Board
-rotateBoard = reverse . map reverse
+posToIdx :: Position -> Int
+posToIdx (x, y) = y * 8 + x
 
 pieceAt :: Board -> Position -> Maybe Piece
-pieceAt b (x, y) = (b !! y) !! x
+pieceAt b p = b ! posToIdx p
 
-colChars :: Player -> String
-colChars White = "  | A B C D E F G H"
-colChars Black = "  | H G F E D C B A"
+interleave :: [a] -> [a] -> [a]
+interleave [] _ = []
+interleave _ [] = []
+interleave (x:xs) (y:ys) = x : y : interleave xs ys
 
 printState :: State -> IO ()
-printState (State b White _ _ _) =
-  printBoard (rotateBoard b) [8,7 .. 1] (colChars White)
-printState (State b Black _ _ _) = printBoard b [1 .. 8] (colChars Black)
-
-showRow :: (Int, [Maybe Piece]) -> String
-showRow (x, ps) =
-  show x ++
-  " | " ++
-  unwords
-    (map
-       (\p ->
-          case p of
-            Just p -> show p
-            Nothing -> ".")
-       ps)
-
-printBoard :: Board -> [Int] -> String -> IO ()
-printBoard b rownums bottom = do
-  mapM_ (putStrLn . showRow) (zip rownums b)
+printState (State b t _ _ _) = do
+  let (bot, xs, ys) =
+        if t == White
+          then (['A'..'H'], [0..7], [7,6..0])
+          else (['H','G'..'A'], [7,6..0], [0..7])
+  mapM_
+    (putStrLn . (\(i, s) -> (show $ i + 1) ++ " | " ++ s))
+    (zip
+       ys
+       (map
+          (unwords . (map (showTile . pieceAt b)))
+          [[(x, y) | x <- xs] | y <- ys]))
   putStrLn "--+----------------"
-  putStrLn bottom
+  putStrLn $ "  | " ++ interleave bot (repeat ' ')
 
 state0 :: State
 state0 = State board0 White (True, True) (True, True) Nothing
@@ -162,12 +164,19 @@ classicCompare x y = fromEnum (compare y x) - 1
 
 between :: Position -> Position -> [Position]
 between (x1, y1) to@(x2, y2) =
-  takeWhile (\p -> p /= to) [(x1 + a * dx, y1 + a * dy) | a <- [1..]]
-  where dx = (classicCompare x1 x2)
-        dy = (classicCompare y1 y2)
+  takeWhile (\p -> p /= to) [(x1 + a * dx, y1 + a * dy) | a <- [1 ..]]
+  where
+    dx = (classicCompare x1 x2)
+    dy = (classicCompare y1 y2)
 
 clearPath :: Board -> Move -> Bool
-clearPath b (Move from to) = all (\p -> pieceAt b p == Nothing) (between from to)
+clearPath b (Move from to) =
+  all (\p -> pieceAt b p == Nothing) (between from to)
+
+doMove :: Board -> Move -> Board
+doMove b m@(Move from to) =
+  let p = pieceAt b from in
+    b // map (\(pos, piece) -> (posToIdx pos, piece)) [(from, Nothing), (to, p)]
 
 step :: State -> Command -> (Message, Maybe State)
 step s c =
@@ -181,9 +190,9 @@ update s@(State b t wc bc p) m@(Move from to) =
    in case mpiece of
         Just piece ->
           if validMove piece m
-            then if (clearPath b m ||kind piece == Knight) then
-                   ("Looks good", Just (State b (nextPlayer t) wc bc p))
-                 else ("Path blocked", Just s)
+            then if (clearPath b m || kind piece == Knight)
+                   then ("Looks good", Just (State (doMove b m) (nextPlayer t) wc bc p))
+                   else ("Path blocked", Just s)
             else ("Invalid " ++ show (kind piece) ++ " move", Just s)
         Nothing -> ("No piece there", Just s)
 
