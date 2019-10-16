@@ -1,5 +1,7 @@
 import Data.Char (isDigit, toLower, toUpper)
 import Data.String (unwords)
+import Data.List (unfoldr)
+import Data.Array.IArray
 
 type Command = String
 
@@ -40,7 +42,7 @@ nextPlayer White = Black
 data Piece =
   Piece
     { player :: Player
-    , rank :: PieceType
+    , kind :: PieceType
     }
   deriving (Eq)
 
@@ -119,22 +121,6 @@ printBoard b rownums bottom = do
 state0 :: State
 state0 = State board0 White (True, True) (True, True) Nothing
 
-step :: State -> Command -> (Message, Maybe State)
-step s c =
-  case readMove c of
-    Just m -> update s m
-    _ -> ("Invalid command", Just s)
-
-update :: State -> Move -> (Message, Maybe State)
-update s@(State b t wc bc p) m@(Move from to) =
-  let mpiece = pieceAt b from
-   in case mpiece of
-        Just piece ->
-          if validMove piece m
-            then ("Looks good", Just (State b (nextPlayer t) wc bc p))
-            else ("Invalid " ++ show (rank piece) ++ " move", Just s)
-        Nothing -> ("No piece there", Just s)
-
 sameRow :: Position -> Position -> Bool
 sameRow (x1, y1) (x2, y2) = y1 == y2
 
@@ -170,6 +156,36 @@ validMove (Piece _ Rook) (Move from to) = sameRow from to || sameCol from to
 validMove (Piece _ Queen) (Move from to) =
   sameRow from to || sameCol from to || sameDiag from to
 validMove (Piece _ King) m = oneStep m
+
+classicCompare :: Int -> Int -> Int
+classicCompare x y = fromEnum (compare y x) - 1
+
+between :: Position -> Position -> [Position]
+between (x1, y1) to@(x2, y2) =
+  takeWhile (\p -> p /= to) [(x1 + a * dx, y1 + a * dy) | a <- [1..]]
+  where dx = (classicCompare x1 x2)
+        dy = (classicCompare y1 y2)
+
+clearPath :: Board -> Move -> Bool
+clearPath b (Move from to) = all (\p -> pieceAt b p == Nothing) (between from to)
+
+step :: State -> Command -> (Message, Maybe State)
+step s c =
+  case readMove c of
+    Just m -> update s m
+    _ -> ("Invalid command", Just s)
+
+update :: State -> Move -> (Message, Maybe State)
+update s@(State b t wc bc p) m@(Move from to) =
+  let mpiece = pieceAt b from
+   in case mpiece of
+        Just piece ->
+          if validMove piece m
+            then if (clearPath b m ||kind piece == Knight) then
+                   ("Looks good", Just (State b (nextPlayer t) wc bc p))
+                 else ("Path blocked", Just s)
+            else ("Invalid " ++ show (kind piece) ++ " move", Just s)
+        Nothing -> ("No piece there", Just s)
 
 main :: IO ()
 main = loop $ Just state0
