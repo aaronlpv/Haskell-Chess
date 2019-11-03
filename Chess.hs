@@ -10,6 +10,15 @@ import Board
   , pieceAt
   )
 import Data.Maybe (fromJust, isJust, isNothing)
+import Move
+  ( Move(..)
+  , pawnOpener
+  , readMove
+  , validCapture
+  , validMove
+  , validMoves
+  , validPawnMove
+  )
 import Position
   ( Position
   , between
@@ -27,93 +36,14 @@ import Types
   ( BoardSide(..)
   , Command
   , Message
-  , Move(..)
   , Piece(..)
   , PieceType(..)
   , Player(..)
   , nextPlayer
-  , readMove
   , showTile
   , squareColor
   )
 import Utils (diff)
-
--- checks if a move is only one tile away (also diagonally)
-oneStep :: Move -> Bool
-oneStep (Move (x1, y1) (x2, y2)) = diff x1 x2 <= 1 && diff y1 y2 <= 1
-
--- checks if a move could be a pawn opener
-pawnOpener :: Move -> Bool
-pawnOpener (Move from@(x1, y1) to@(x2, y2)) =
-  sameCol from to && (y1, y2) `elem` [(1, 3), (6, 4)]
-
--- checks if a certain player's pawn may do a pawn opener at position
-canDoOpener :: Player -> Position -> Bool
-canDoOpener White (x, y) = y == 1
-canDoOpener Black (x, y) = y == 6
-
-validPawnMove :: Move -> Bool
-validPawnMove m = oneStep m || pawnOpener m
-
--- checks if a move is pseudolegal for a certain piece
--- pseudolegal because we do not check the board at all, only the move itself
-validMove :: Piece -> Move -> Bool
-validMove (Piece Black Pawn) m@(Move (x1, y1) (x2, y2)) =
-  y1 > y2 && validPawnMove m
-validMove (Piece White Pawn) m@(Move (x1, y1) (x2, y2)) =
-  y1 < y2 && validPawnMove m
-validMove (Piece _ Bishop) (Move from to) = sameDiag from to
-validMove (Piece _ Knight) (Move (x1, y1) (x2, y2)) =
-  let (dx, dy) = (diff x1 x2, diff y1 y2)
-   in (dx == 1 && dy == 2) || (dx == 2 && dy == 1)
-validMove (Piece _ Rook) (Move from to) = sameRow from to || sameCol from to
-validMove (Piece _ Queen) (Move from to) =
-  sameRow from to || sameCol from to || sameDiag from to
-validMove (Piece _ King) m = oneStep m
-
--- generates all valid moves for a certain piece
-validMoves :: Piece -> Position -> [[Position]]
-validMoves (Piece _ Knight) (x, y) =
-  map (: []) $
-  filter
-    validPos
-    [ (x - 1, y - 2)
-    , (x - 2, y - 1)
-    , (x + 2, y + 1)
-    , (x + 1, y + 2)
-    , (x + 2, y - 1)
-    , (x - 2, y + 1)
-    , (x + 1, y - 2)
-    , (x - 1, y + 2)
-    ]
-validMoves (Piece _ King) (x, y) =
-  map (: []) $
-  filter
-    validPos
-    [(x + a, y + b) | a <- [-1, 0, 1], b <- [-1, 0, 1], (a, b) /= (0, 0)]
-validMoves (Piece _ Queen) (x, y) = raysFrom (x, y)
-validMoves (Piece _ Rook) (x, y) = straightRays (x, y)
-validMoves (Piece _ Bishop) (x, y) = diagRays (x, y)
-validMoves (Piece c@Black Pawn) p@(x, y) =
-  map (: []) (filter validPos [(x + 1, y - 1), (x - 1, y - 1)]) ++ [forward]
-  where
-    forward =
-      if canDoOpener c p
-        then [(x, y - 1), (x, y - 2)]
-        else filter validPos [(x, y - 1)]
-validMoves (Piece c@White Pawn) p@(x, y) =
-  map (: []) (filter validPos [(x + 1, y + 1), (x - 1, y + 1)]) ++ [forward]
-  where
-    forward =
-      if canDoOpener c p
-        then [(x, y + 1), (x, y + 2)]
-        else filter validPos [(x, y + 1)]
-
--- checks if a capture move is valid (only matters for pawns)
-validCapture :: Piece -> Move -> Bool
-validCapture p@(Piece _ Pawn) m@(Move (x1, y1) (x2, y2)) =
-  validMove p m && x1 /= x2
-validCapture p m = validMove p m
 
 -- what positions have to be looked at to see if a king is in check
 -- contains lists of 'rays' as only the first piece encountered on each ray matters
@@ -130,6 +60,19 @@ underAttack b pl pos =
     dangerous ((_, Nothing):xs) = dangerous xs
     dangerous ((ppos, Just p@(Piece pl2 knd)):xs) =
       pl /= pl2 && validCapture p (Move ppos pos)
+      
+-- helper function to update State
+updateState :: State -> Board -> Maybe Position -> Move -> Maybe State
+updateState s@(State b t wc bc p) newboard newpassants move =
+  Just $
+  State
+    newboard
+    (nextPlayer t)
+    (wCastlePerms wc move)
+    (bCastlePerms bc move)
+    newpassants
+      
+-- CASTLING LOGIC
 
 -- check if a move is a valid castle move, returns the side if it is
 isCastling :: Move -> Maybe BoardSide
@@ -186,6 +129,8 @@ doCastling s@(State b t wc bc p) m@(Move from to) =
         then ( "Castled!"
              , updateState s (applyMoves b [m, castleRookMove t side]) Nothing m)
         else ("You may not castle at this time", Just s)
+        
+-- OTHER MOVE LOGIC
 
 -- executes a pawn move
 doPawnMove :: State -> Move -> Piece -> Maybe Piece -> (Message, Maybe State)
@@ -214,36 +159,8 @@ doMove s@(State b t wc bc p) m@(Move from to) fromp@(Piece frp frk) topiece =
     then ("", updateState s (applyMove b m) Nothing m)
     else ("Path blocked", Just s)
 
-step :: State -> Command -> (Message, Maybe State)
-step s c =
-  case readMove c of
-    Just m@(Move from to) ->
-      endgameCheck
-        s
-        (update s m (pieceAt (board s) from) (pieceAt (board s) to))
-    _ -> ("Invalid command", Just s)
-
--- the 'main' update function
-update :: State -> Move -> Maybe Piece -> Maybe Piece -> (Message, Maybe State)
-update s m Nothing topiece = ("No piece there", Just s)
-update s@(State b t wc bc p) m@(Move from to) (Just fromp@(Piece frp frk)) topiece
-  | frp /= t = ("Not your piece", Just s)
-  | frk == King && isJust (isCastling m) = doCastling s m
-  | not (validMove fromp m) = ("Invalid " ++ show frk ++ " move", Just s)
-  | frk == Pawn = doPawnMove s m fromp topiece
-  | otherwise = doMove s m fromp topiece
-
--- helper function to update State
-updateState :: State -> Board -> Maybe Position -> Move -> Maybe State
-updateState s@(State b t wc bc p) newboard newpassants move =
-  Just $
-  State
-    newboard
-    (nextPlayer t)
-    (wCastlePerms wc move)
-    (bCastlePerms bc move)
-    newpassants
-
+-- ENDGAME LOGIC
+    
 -- checks for draw by insufficient material
 -- quite the ugly function, but also creates almost no data structures
 insufMaterial :: Board -> Bool
@@ -284,10 +201,10 @@ hasLegalMove b kingPos (pos, pc@(Piece c k)) = any check psdlegals
       case pieceAt b to of
         Just (Piece toc _) ->
           c /= toc &&
-           (k /= Pawn && not (sameCol pos to)) && validState (Move pos to) 
+          (k /= Pawn && not (sameCol pos to)) && validState (Move pos to)
         Nothing ->
           ((k /= Pawn || sameCol pos to) && validState (Move pos to)) ||
-           check ms
+          check ms
       where
         validState m =
           not
@@ -333,6 +250,27 @@ endgameCheck old@(State _ ot _ _ _) (msg, Just new@(State b nt wc bc p))
       (ot == White && whiteChecked) || (ot == Black && blackChecked)
     opponentChecked =
       (nt == White && whiteChecked) || (nt == Black && blackChecked)
+
+-- MAIN LOGIC
+      
+step :: State -> Command -> (Message, Maybe State)
+step s c =
+  case readMove c of
+    Just m@(Move from to) ->
+      endgameCheck
+        s
+        (update s m (pieceAt (board s) from) (pieceAt (board s) to))
+    _ -> ("Invalid command", Just s)
+
+-- the 'main' update function
+update :: State -> Move -> Maybe Piece -> Maybe Piece -> (Message, Maybe State)
+update s m Nothing topiece = ("No piece there", Just s)
+update s@(State b t wc bc p) m@(Move from to) (Just fromp@(Piece frp frk)) topiece
+  | frp /= t = ("Not your piece", Just s)
+  | frk == King && isJust (isCastling m) = doCastling s m
+  | not (validMove fromp m) = ("Invalid " ++ show frk ++ " move", Just s)
+  | frk == Pawn = doPawnMove s m fromp topiece
+  | otherwise = doMove s m fromp topiece
 
 main :: IO ()
 main = loop $ Just state0
