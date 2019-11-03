@@ -93,11 +93,11 @@ testOrder c = map (\p -> if isNothing p then Nothing else Just (Piece c (fromJus
 rowsOf :: Int -> Maybe Piece -> [Maybe Piece]
 rowsOf n = replicate (n * 8)
 
--- TODO: find out if positions can be used as indices directly
 allPieces :: Board -> [(Position, Piece)]
 allPieces b =
-  map (\(idx, pc) -> ((idx `mod` 8, idx `div` 8), fromJust pc)) $
-  filter (\(idx, pc) -> isJust pc) (assocs b)
+  map (\(pos,piece) -> (pos, fromJust piece)) $
+  filter (\(_,piece) -> isJust piece) $
+  map (\pos -> (pos, pieceAt b pos)) [(x,y) | y <- [0..7], x <- [0..7]]
 
 board0 :: Board
 board0 =
@@ -351,7 +351,7 @@ step :: State -> Command -> (Message, Maybe State)
 step s c =
   case readMove c of
     Just m@(Move from to) ->
-      update s m (pieceAt (board s) from) (pieceAt (board s) to)
+      endgameCheck s (update s m (pieceAt (board s) from) (pieceAt (board s) to))
     _ -> ("Invalid command", Just s)
 
 update :: State -> Move -> Maybe Piece -> Maybe Piece -> (Message, Maybe State)
@@ -401,8 +401,33 @@ insufMaterial b = loop (allPieces b) False False False False 0 0
     check wbBshp wwBshp bbBshp bwBshp bKnghts wKnghts =
       sum (map fromEnum [wbBshp, wwBshp, bbBshp, bwBshp]) == 1 -- King vs King and bishop
 
-endgameCheck :: State -> State -> (Message, Maybe State)
-endgameCheck old new = ("OK", Just new)
+getKingPos :: Board -> (Position, Position)
+getKingPos b = loop (allPieces b) Nothing Nothing
+  where loop :: [(Position, Piece)] -> Maybe Position -> Maybe Position -> (Position, Position)
+        loop _ (Just x) (Just y) = (x,y)
+        loop ((pos,Piece Black King):pcs) x _ = loop pcs x (Just pos)
+        loop ((pos,Piece White King):pcs) _ y = loop pcs (Just pos) y
+        loop (_:pcs) x y = loop pcs x y
+        loop _ _ _ = error "Not enough kings on board"
+
+hasValidMoves :: State -> Bool -> Bool
+hasValidMoves _ _ = True
+
+endgameCheck :: State -> (Message, Maybe State) -> (Message, Maybe State)
+endgameCheck old (msg, Nothing) = (msg, Just old)
+endgameCheck old@(State _ ot _ _ _) (msg,(Just new@(State b nt wc bc p)))
+  | insufMaterial b = ("Draw by insufficient material", Nothing)
+  | playerChecked = ("You may not leave your king in check", Just old)
+  | not (hasValidMoves new opponentChecked)
+    = if opponentChecked
+      then ("Checkmate! " ++ (show ot) ++ " wins!", Nothing)
+      else ("Draw!", Nothing)
+  | otherwise = (if opponentChecked then "Check!" else msg, Just new)
+  where (whiteKingPos, blackKingPos) = getKingPos b
+        whiteChecked = (underAttack b White whiteKingPos)
+        blackChecked = (underAttack b Black blackKingPos)
+        playerChecked = (ot == White && whiteChecked) || (ot == Black && blackChecked)
+        opponentChecked = (nt == White && whiteChecked) || (nt == Black && blackChecked)
 
 main :: IO ()
 main = loop $ Just state0
