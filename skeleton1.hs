@@ -58,7 +58,7 @@ instance Show Piece where
 
 showTile :: Maybe Piece -> String
 showTile Nothing = "."
-showTile (Just p) = (show p)
+showTile (Just p) = show p
 
 type Board = Array Int (Maybe Piece)
 
@@ -85,6 +85,10 @@ readMove _ = Nothing
 
 order :: [PieceType]
 order = [Rook, Knight, Bishop, Queen, King, Bishop, Knight, Rook]
+
+testOrder :: Player -> [Maybe Piece]
+testOrder c = map (\p -> if isNothing p then Nothing else Just (Piece c (fromJust p)))
+  [Just Rook, Nothing, Nothing, Nothing, Just King, Nothing, Nothing, Just Rook]
 
 rowsOf :: Int -> Maybe Piece -> [Maybe Piece]
 rowsOf n = replicate (n * 8)
@@ -120,7 +124,14 @@ changeBoard :: Board -> [(Position, Maybe Piece)] -> Board
 changeBoard b = (b //) . map (\(pos, piece) -> (posToIdx pos, piece))
 
 moveToChange :: Board -> Move -> [(Position, Maybe Piece)]
-moveToChange b (Move from to) = [(from, Nothing), (to, pieceAt b from)]
+moveToChange b (Move from to) =
+  [(from, Nothing), (to, promote to (pieceAt b from))]
+  where
+    promote (x, y) p@(Just (Piece c Pawn)) =
+      if y `elem` [0, 7]
+        then Just (Piece c Queen)
+        else p
+    promote _ p = p
 
 applyMove :: Board -> Move -> Board
 applyMove b m = changeBoard b (moveToChange b m)
@@ -144,11 +155,11 @@ printState (State b t _ _ _) = do
           then (['A' .. 'H'], [0 .. 7], [7,6 .. 0])
           else (['H','G' .. 'A'], [7,6 .. 0], [0 .. 7])
   mapM_
-    (putStrLn . (\(i, s) -> (show $ i + 1) ++ " | " ++ s))
+    (putStrLn . (\(i, s) -> show  (i + 1) ++ " | " ++ s))
     (zip
        ys
        (map
-          (unwords . (map (showTile . pieceAt b)))
+          (unwords . map (showTile . pieceAt b))
           [[(x, y) | x <- xs] | y <- ys]))
   putStrLn "--+----------------"
   putStrLn $ "  | " ++ interleave bot (repeat ' ')
@@ -241,11 +252,11 @@ between :: Position -> Position -> [Position]
 between from@(x1, y1) to@(x2, y2) = take num (ray from (dx, dy))
   where
     num = max (diff x1 x2) (diff y1 y2) - 1
-    dx = (classicCompare x2 x1)
-    dy = (classicCompare y2 y1)
+    dx = classicCompare x2 x1
+    dy = classicCompare y2 y1
 
 captureRays :: Position -> [[Position]]
-captureRays from = raysFrom from ++ (map (: []) $ validMoves Knight from)
+captureRays from = raysFrom from ++ map (: []) (validMoves Knight from)
 
 underAttack :: Board -> Player -> Position -> Bool
 underAttack b pl pos =
@@ -254,15 +265,11 @@ underAttack b pl pos =
   where
     dangerous [] = False
     dangerous ((_, Nothing):xs) = dangerous xs
-    dangerous (((ppos, Just p@(Piece pl2 knd))):xs) =
+    dangerous ((ppos, Just p@(Piece pl2 knd)):xs) =
       pl /= pl2 && validCapture p (Move ppos pos)
 
 clearPath :: Board -> Position -> Position -> Bool
-clearPath b from to = all (\p -> pieceAt b p == Nothing) (between from to)
-
-isPromotion :: Piece -> Move -> Bool
-isPromotion (Piece p Pawn) (Move from (x2, y2)) = y2 `elem` [0, 7]
-isPromotion _ _ = False
+clearPath b from to = all (isNothing . pieceAt b) (between from to)
 
 isCastling :: Move -> Maybe BoardSide
 isCastling (Move (4, 7) (2, 7)) = Just QueenSide
@@ -295,38 +302,40 @@ castlingAllowed (State b t (qs, ks) bc _) p@White KingSide =
   clearPath b (4, 0) (4, 0) &&
   not (any (underAttack b p) (between (1, 0) (5, 0)))
 
+wCastlePerms :: (Bool, Bool) -> Move -> (Bool, Bool)
+wCastlePerms (qc, kc) (Move (4, 0) to) = (False, False)
+wCastlePerms (qc, kc) (Move from to) =
+  (qc && (0, 0) `elem` [from, to], kc && (7, 0) `elem` [from, to])
+
+bCastlePerms :: (Bool, Bool) -> Move -> (Bool, Bool)
+bCastlePerms (qc, kc) (Move (4, 7) to) = (False, False)
+bCastlePerms (qc, kc) (Move from to) =
+  (qc && (0, 7) `elem` [from, to], kc && (7, 7) `elem` [from, to])
+
 doCastling :: State -> Move -> (Message, Maybe State)
 doCastling s@(State b t wc bc p) m@(Move from to) =
   case isCastling m of
-    Nothing -> (error "Invalid castling move in doCastling")
+    Nothing -> error "Invalid castling move in doCastling"
     Just side ->
       if castlingAllowed s t side
         then ( "Castled!"
-             , Just
-                 (State
-                    (applyMoves b [m, castleRookMove t side])
-                    (nextPlayer t)
-                    wc
-                    bc
-                    Nothing))
+             , updateState s (applyMoves b [m, castleRookMove t side]) Nothing m)
         else ("You may not castle at this time", Just s)
 
 doPawnMove :: State -> Move -> Piece -> Maybe Piece -> (Message, Maybe State)
 doPawnMove s@(State b t wc bc p) m@(Move from to) frompiece topiece
   | pawnOpener m && isNothing topiece && clearPath b from to =
-    ("", Just (State (applyMove b m) (nextPlayer t) wc bc (Just to)))
+    ("", updateState s (applyMove b m) (Just to) m)
   | validCapture frompiece m &&
       case p of
         Nothing -> False
         Just passpos -> to `isBehind` passpos =
     ( "Just passing by"
-    , Just
-        (State
-           (applyMovesAndChanges b [m] [(fromJust p, Nothing)])
-           (nextPlayer t)
-           wc
-           bc
-           Nothing))
+    , updateState
+        s
+        (applyMovesAndChanges b [m] [(fromJust p, Nothing)])
+        Nothing
+        m)
   | otherwise = doMove s m frompiece topiece
 
 doMove :: State -> Move -> Piece -> Maybe Piece -> (Message, Maybe State)
@@ -335,7 +344,7 @@ doMove s@(State b t wc bc p) m@(Move from to) fromp@(Piece frp frk) topiece =
      case topiece of
        Nothing -> True
        Just (Piece top _) -> top /= t
-    then ("", Just (State (applyMove b m) (nextPlayer t) wc bc Nothing))
+    then ("", updateState s (applyMove b m) Nothing m)
     else ("Path blocked", Just s)
 
 step :: State -> Command -> (Message, Maybe State)
@@ -354,22 +363,32 @@ update s@(State b t wc bc p) m@(Move from to) (Just fromp@(Piece frp frk)) topie
   | frk == Pawn = doPawnMove s m fromp topiece
   | otherwise = doMove s m fromp topiece
 
+updateState :: State -> Board -> Maybe Position -> Move -> Maybe State
+updateState s@(State b t wc bc p) newboard newpassants move =
+  Just $
+  State
+    newboard
+    (nextPlayer t)
+    (wCastlePerms wc move)
+    (bCastlePerms bc move)
+    newpassants
+
 insufMaterial :: Board -> Bool
 insufMaterial b = loop (allPieces b) False False False False 0 0
   where
-    loop ((_, (Piece Black Knight)):pcs) wbBshp wwBshp bbBshp bwBshp bKnghts wKnghts =
+    loop ((_, Piece Black Knight):pcs) wbBshp wwBshp bbBshp bwBshp bKnghts wKnghts =
       loop pcs wbBshp wwBshp bbBshp bwBshp (bKnghts + 1) wKnghts
-    loop ((_, (Piece White Knight)):pcs) wbBshp wwBshp bbBshp bwBshp bKnghts wKnghts =
+    loop ((_, Piece White Knight):pcs) wbBshp wwBshp bbBshp bwBshp bKnghts wKnghts =
       loop pcs wbBshp wwBshp bbBshp bwBshp bKnghts (wKnghts + 1)
-    loop ((pos, (Piece White Bishop)):pcs) wbBshp wwBshp bbBshp bwBshp bKnghts wKnghts =
+    loop ((pos, Piece White Bishop):pcs) wbBshp wwBshp bbBshp bwBshp bKnghts wKnghts =
       if squareColor pos == White
         then loop pcs wbBshp True bbBshp bwBshp bKnghts wKnghts
         else loop pcs True wwBshp bbBshp bwBshp bKnghts wKnghts
-    loop ((pos, (Piece Black Bishop)):pcs) wbBshp wwBshp bbBshp bwBshp bKnghts wKnghts =
+    loop ((pos, Piece Black Bishop):pcs) wbBshp wwBshp bbBshp bwBshp bKnghts wKnghts =
       if squareColor pos == White
         then loop pcs wbBshp wwBshp bbBshp True bKnghts wKnghts
         else loop pcs wbBshp wwBshp True bwBshp bKnghts wKnghts
-    loop ((_, (Piece _ King)):pcs) wbBshp wwBshp bbBshp bwBshp bKnghts wKnghts =
+    loop ((_, Piece _ King):pcs) wbBshp wwBshp bbBshp bwBshp bKnghts wKnghts =
       loop pcs wbBshp wwBshp bbBshp bwBshp bKnghts wKnghts
     loop (_:pcs) wbBshp wwBshp bbBshp bwBshp bKnghts wKnghts = False
     loop [] wbBshp wwBshp bbBshp bwBshp bKnghts wKnghts =
@@ -380,7 +399,7 @@ insufMaterial b = loop (allPieces b) False False False False 0 0
     check True False True False 0 0 = True -- Opposing bishops on black squares
     check False True False True 0 0 = True -- Opposing bishops on white squares
     check wbBshp wwBshp bbBshp bwBshp bKnghts wKnghts =
-      (sum $ map fromEnum [wbBshp, wwBshp, bbBshp, bwBshp]) == 1 -- King vs King and bishop
+      sum (map fromEnum [wbBshp, wwBshp, bbBshp, bwBshp]) == 1 -- King vs King and bishop
 
 endgameCheck :: State -> State -> (Message, Maybe State)
 endgameCheck old new = ("OK", Just new)
