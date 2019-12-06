@@ -33,12 +33,12 @@ data BoardSide
 
 -- PIECETYPE
 data PieceType
-  = Pawn
-  | Knight
-  | Bishop
-  | Rook
+  = King
   | Queen
-  | King
+  | Bishop
+  | Knight
+  | Rook
+  | Pawn
   deriving (Read, Enum, Eq, Ord, Show)
 
 kindShow :: PieceType -> String
@@ -53,7 +53,7 @@ kindShow King = "k"
 data Player
   = Black
   | White
-  deriving (Eq, Show)
+  deriving (Eq, Show, Enum)
 
 nextPlayer :: Player -> Player
 nextPlayer Black = White
