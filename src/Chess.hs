@@ -1,3 +1,4 @@
+module Chess (update) where
 import Board
   ( Board
   , allPieces
