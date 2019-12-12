@@ -12,7 +12,7 @@ module Position
   , raysFrom
   ) where
 
-import Utils (classicCompare, diff)
+import Utils
 
 type Position = (Int, Int)
 

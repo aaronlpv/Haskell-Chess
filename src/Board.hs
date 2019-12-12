@@ -12,9 +12,10 @@ module Board
 
 import Data.Array
 import Data.Maybe (fromJust, isJust, isNothing)
-import Move (Move(..))
-import Position (Position, between)
-import Types (Piece(..), PieceType(..), Player(..))
+
+import Move
+import Position
+import Types
 
 -- the board is a 1d array of Maybe Piece
 -- arrays are immutable so unfortunately we have to copy on every change

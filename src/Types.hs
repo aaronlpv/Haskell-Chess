@@ -11,7 +11,7 @@ module Types
   ) where
 
 import Data.Char (toUpper)
-import Position (Position)
+import Position
 
 -- This file contains all types which are too small to deserve their own file
 type Command = String

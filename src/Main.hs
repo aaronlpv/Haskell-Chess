@@ -1,15 +1,16 @@
-import Board (allPieces, Board (..), pieceAt)
 import Data.Maybe (fromJust)
 import Codec.BMP
 import Control.Monad
 import Data.Either (fromRight)
 import Graphics.Gloss
 import Graphics.Gloss.Interface.IO.Interact
-import Position (Position)
-import State (State(..), state0)
-import Types (Piece(..), PieceType(..), Player(..))
+
+import Board
+import Position
+import State
+import Types
 import Chess (update)
-import Move (Move (..))
+import Move
 
 windowSize :: Int
 windowSize = 856

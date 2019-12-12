@@ -4,11 +4,11 @@ module State
   , state0
   ) where
 
-import Board (Board, board0, pieceAt)
 import Data.String (unwords)
-import Position (Position)
-import Types (Player(..), showTile)
-import Utils (interleave)
+import Board
+import Position
+import Types
+import Utils
 
 data State =
   State

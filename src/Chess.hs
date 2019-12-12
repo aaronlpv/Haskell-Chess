@@ -1,50 +1,12 @@
 module Chess (update) where
-import Board
-  ( Board
-  , allPieces
-  , applyMove
-  , applyMoves
-  , applyMovesAndChanges
-  , board0
-  , clearPath
-  , getKingPos
-  , pieceAt
-  )
 import Data.Maybe (fromJust, isJust, isNothing)
+
+import Board
 import Move
-  ( Move(..)
-  , pawnOpener
-  , readMove
-  , validCapture
-  , validMove
-  , validMoves
-  , validPawnMove
-  )
 import Position
-  ( Position
-  , between
-  , diagRays
-  , isBehind
-  , raysFrom
-  , sameCol
-  , sameDiag
-  , sameRow
-  , straightRays
-  , validPos
-  )
-import State (State(..), printState, state0)
+import State
 import Types
-  ( BoardSide(..)
-  , Command
-  , Message
-  , Piece(..)
-  , PieceType(..)
-  , Player(..)
-  , nextPlayer
-  , showTile
-  , squareColor
-  )
-import Utils (diff)
+import Utils
 
 -- what positions have to be looked at to see if a king is in check
 -- contains lists of 'rays' as only the first piece encountered on each ray matters

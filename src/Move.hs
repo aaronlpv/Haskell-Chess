@@ -9,17 +9,8 @@ module Move
   ) where
 
 import Position
-  ( Position
-  , diagRays
-  , raysFrom
-  , sameCol
-  , sameDiag
-  , sameRow
-  , straightRays
-  , validPos
-  )
-import Types (Piece(..), PieceType(..), Player(..))
-import Utils (diff)
+import Types
+import Utils
 
 data Move =
   Move Position Position
