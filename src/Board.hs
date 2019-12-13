@@ -8,6 +8,7 @@ module Board
   , applyMovesAndChanges
   , clearPath
   , getKingPos
+  , pieceAtOwnedBy
   ) where
 
 import Data.Array
@@ -40,9 +41,6 @@ allPieces b =
 order :: [PieceType]
 order = [Rook, Knight, Bishop, Queen, King, Bishop, Knight, Rook]
 
--- testOrder :: Player -> [Maybe Piece]
--- testOrder c = map (\p -> if isNothing p then Nothing else Just (Piece c (fromJust p)))
---   [Just Rook, Nothing, Nothing, Nothing, Just King, Nothing, Nothing, Just Rook]
 rowsOf :: Int -> Maybe Piece -> [Maybe Piece]
 rowsOf n = replicate (n * 8)
 
@@ -100,3 +98,9 @@ getKingPos b = loop (allPieces b) Nothing Nothing
     loop ((pos, Piece White King):pcs) _ y = loop pcs (Just pos) y
     loop (_:pcs) x y = loop pcs x y
     loop _ _ _ = error "Not enough kings on board"
+
+pieceAtOwnedBy :: Board -> Player -> Position -> Bool
+pieceAtOwnedBy b pl pos =
+  case (pieceAt b pos) of
+    Nothing -> False
+    Just (Piece pl2 k) -> pl == pl2

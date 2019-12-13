@@ -63,26 +63,25 @@ displayState sprites (Game (State b t _ _ _) _) =
       , y <- [0,1 .. 7]
       , (odd x == odd y) == (t == White)
       ]
+displayState sprites PickPlayer =
+  Pictures $
+  [Translate (-fwindowSize/4.5) (fwindowSize/5) $ Text "Chess",
+   Scale 0.5 0.5 $ Translate (-fwindowSize/2.15) (-fwindowSize/6) $ Text "Pick a side",
+   Translate (-fwindowSize/5) (-fwindowSize/4) $ Scale (funit/2) (funit/2) $ (sprites !! fromEnum White) !! fromEnum King,
+   Translate (fwindowSize/5) (-fwindowSize/4) $ Scale (funit/2) (funit/2) $ (sprites !! fromEnum Black) !! fromEnum King]
 displayState _ _ = (error "not implemented") -- FIXME
 
 handleEvent :: Event -> GState -> GState
-handleEvent event state@(Game s@(State b t _ _ _) from)
-  | EventKey (MouseButton LeftButton) Up _ pt@(x,y) <- event
-  , Nothing <- from
-  = Game s (Just (readPos x y))
-  | EventKey (MouseButton LeftButton) Up _ pt@(x,y) <- event
-  , Just pos <- from
-  = let pos2 = (readPos x y)
-        game = fromJust $ snd $ update s (Move pos pos2) (pieceAt (board s) pos) (pieceAt (board s) pos2) in
-      Game game Nothing
-  | otherwise = state
-  where readPos x y = convertPosition t (floor ((x + fwindowSize / 2) / funit * 2),
-                                         floor ((y + fwindowSize / 2) / funit * 2))
-handleEvent _ s = s
+handleEvent (EventKey (MouseButton LeftButton) Up _ (x,y)) state@(Game s@(State b t _ _ _) from)
+  = case from of Nothing -> if (pieceAtOwnedBy b t cpos) then Game s (Just cpos) else state
+                 Just fromPos ->
+                   let game = fromJust $ snd $ update s (Move fromPos cpos) (pieceAt (board s) fromPos) (pieceAt (board s) cpos) in
+                     Game game Nothing
+  where cpos = convertPosition t (floor ((x + fwindowSize / 2) / funit * 2),
+                                  floor ((y + fwindowSize / 2) / funit * 2))
 
-debug :: GState -> IO ()
-debug (Game s p) = putStrLn (show p)
-debug _ = return ()
+handleEvent (EventKey (MouseButton LeftButton) Up _ _) PickPlayer = gstate0
+handleEvent _ s = s
 
 main = do
   bmp <-
@@ -94,10 +93,7 @@ main = do
   interactIO
     (InWindow "Chess" (windowSize, windowSize) (10, 10))
     white
-    gstate0
+    PickPlayer
     (return . displayState sprites)
-    (\e s -> do
-        let ns = handleEvent e s
-        debug ns
-        return ns)
+    (\e s -> return $ handleEvent e s)
     (\_ -> return ())
