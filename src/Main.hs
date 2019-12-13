@@ -51,7 +51,7 @@ displayState sprites (Game (State b t _ _ _) _) =
     pieces =
       map
         (\(pos, Piece p k) ->
-           case (convertPosition t pos) of (x,y) ->
+           case convertPosition t pos of (x,y) ->
                                              Translate
                                              (fromIntegral x)
                                              (fromIntegral y)
@@ -64,16 +64,16 @@ displayState sprites (Game (State b t _ _ _) _) =
       , (odd x == odd y) == (t == White)
       ]
 displayState sprites PickPlayer =
-  Pictures $
+  Pictures
   [Translate (-fwindowSize/4.5) (fwindowSize/5) $ Text "Chess",
    Scale 0.5 0.5 $ Translate (-fwindowSize/2.15) (-fwindowSize/6) $ Text "Pick a side",
    Translate (-fwindowSize/5) (-fwindowSize/4) $ Scale (funit/2) (funit/2) $ (sprites !! fromEnum White) !! fromEnum King,
    Translate (fwindowSize/5) (-fwindowSize/4) $ Scale (funit/2) (funit/2) $ (sprites !! fromEnum Black) !! fromEnum King]
-displayState _ _ = (error "not implemented") -- FIXME
+displayState _ _ = error "not implemented" -- FIXME
 
 handleEvent :: Event -> GState -> GState
 handleEvent (EventKey (MouseButton LeftButton) Up _ (x,y)) state@(Game s@(State b t _ _ _) from)
-  = case from of Nothing -> if (pieceAtOwnedBy b t cpos) then Game s (Just cpos) else state
+  = case from of Nothing -> if pieceAtOwnedBy b t cpos then Game s (Just cpos) else state
                  Just fromPos ->
                    let game = fromJust $ snd $ step s (Move fromPos cpos) in
                      Game game Nothing

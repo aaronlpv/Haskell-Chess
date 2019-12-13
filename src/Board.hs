@@ -101,6 +101,6 @@ getKingPos b = loop (allPieces b) Nothing Nothing
 
 pieceAtOwnedBy :: Board -> Player -> Position -> Bool
 pieceAtOwnedBy b pl pos =
-  case (pieceAt b pos) of
+  case pieceAt b pos of
     Nothing -> False
     Just (Piece pl2 k) -> pl == pl2
