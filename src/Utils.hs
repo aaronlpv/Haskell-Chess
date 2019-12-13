@@ -1,13 +1,7 @@
 module Utils
-  ( interleave
-  , diff
+  ( diff
   , classicCompare
   ) where
-
-interleave :: [a] -> [a] -> [a]
-interleave [] _ = []
-interleave _ [] = []
-interleave (x:xs) (y:ys) = x : y : interleave xs ys
 
 -- absolute difference between 2 ints
 diff :: Int -> Int -> Int

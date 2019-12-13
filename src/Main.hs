@@ -9,7 +9,7 @@ import Board
 import Position
 import State
 import Types
-import Chess (update)
+import Chess (step)
 import Move
 
 windowSize :: Int
@@ -75,7 +75,7 @@ handleEvent :: Event -> GState -> GState
 handleEvent (EventKey (MouseButton LeftButton) Up _ (x,y)) state@(Game s@(State b t _ _ _) from)
   = case from of Nothing -> if (pieceAtOwnedBy b t cpos) then Game s (Just cpos) else state
                  Just fromPos ->
-                   let game = fromJust $ snd $ update s (Move fromPos cpos) (pieceAt (board s) fromPos) (pieceAt (board s) cpos) in
+                   let game = fromJust $ snd $ step s (Move fromPos cpos) in
                      Game game Nothing
   where cpos = convertPosition t (floor ((x + fwindowSize / 2) / funit * 2),
                                   floor ((y + fwindowSize / 2) / funit * 2))

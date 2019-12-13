@@ -1,6 +1,5 @@
 module Move
   ( Move(..)
-  , readMove
   , pawnOpener
   , validMove
   , validMoves
@@ -15,18 +14,6 @@ import Utils
 data Move =
   Move Position Position
   deriving (Eq, Show)
-
-readMove :: String -> Maybe Move
-readMove [c1, c2, c3, c4]
-  | all validChar [c1, c3] && all validDigit [c2, c4] =
-    Just (Move (charToInt c1, digitToInt c2) (charToInt c3, digitToInt c4))
-  | otherwise = Nothing
-  where
-    validChar c = c >= 'a' && c <= 'h'
-    validDigit c = c >= '1' && c <= '8'
-    charToInt c = fromEnum c - fromEnum 'a'
-    digitToInt c = fromEnum c - fromEnum '1'
-readMove _ = Nothing
 
 -- checks if a move is only one tile away (also diagonally)
 oneStep :: Move -> Bool

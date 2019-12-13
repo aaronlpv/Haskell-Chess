@@ -1,4 +1,4 @@
-module Chess (update) where
+module Chess (step) where
 import Data.Maybe (fromJust, isJust, isNothing)
 
 import Board
@@ -23,7 +23,7 @@ underAttack b pl pos =
     dangerous ((_, Nothing):xs) = dangerous xs
     dangerous ((ppos, Just p@(Piece pl2 knd)):xs) =
       pl /= pl2 && validCapture p (Move ppos pos)
-      
+
 -- helper function to update State
 updateState :: State -> Board -> Maybe Position -> Move -> Maybe State
 updateState s@(State b t wc bc p) newboard newpassants move =
@@ -34,7 +34,7 @@ updateState s@(State b t wc bc p) newboard newpassants move =
     (wCastlePerms wc move)
     (bCastlePerms bc move)
     newpassants
-      
+
 -- CASTLING LOGIC
 
 -- check if a move is a valid castle move, returns the side if it is
@@ -92,7 +92,7 @@ doCastling s@(State b t wc bc p) m@(Move from to) =
         then ( "Castled!"
              , updateState s (applyMoves b [m, castleRookMove t side]) Nothing m)
         else ("You may not castle at this time", Just s)
-        
+
 -- OTHER MOVE LOGIC
 
 -- executes a pawn move
@@ -123,36 +123,6 @@ doMove s@(State b t wc bc p) m@(Move from to) fromp@(Piece frp frk) topiece =
     else ("Path blocked", Just s)
 
 -- ENDGAME LOGIC
-    
--- checks for draw by insufficient material
--- quite the ugly function, but also creates almost no data structures
-insufMaterial :: Board -> Bool
-insufMaterial b = loop (allPieces b) False False False False 0 0
-  where
-    loop ((_, Piece Black Knight):pcs) wbBshp wwBshp bbBshp bwBshp bKnghts wKnghts =
-      loop pcs wbBshp wwBshp bbBshp bwBshp (bKnghts + 1) wKnghts
-    loop ((_, Piece White Knight):pcs) wbBshp wwBshp bbBshp bwBshp bKnghts wKnghts =
-      loop pcs wbBshp wwBshp bbBshp bwBshp bKnghts (wKnghts + 1)
-    loop ((pos, Piece White Bishop):pcs) wbBshp wwBshp bbBshp bwBshp bKnghts wKnghts =
-      if squareColor pos == White
-        then loop pcs wbBshp True bbBshp bwBshp bKnghts wKnghts
-        else loop pcs True wwBshp bbBshp bwBshp bKnghts wKnghts
-    loop ((pos, Piece Black Bishop):pcs) wbBshp wwBshp bbBshp bwBshp bKnghts wKnghts =
-      if squareColor pos == White
-        then loop pcs wbBshp wwBshp bbBshp True bKnghts wKnghts
-        else loop pcs wbBshp wwBshp True bwBshp bKnghts wKnghts
-    loop ((_, Piece _ King):pcs) wbBshp wwBshp bbBshp bwBshp bKnghts wKnghts =
-      loop pcs wbBshp wwBshp bbBshp bwBshp bKnghts wKnghts
-    loop (_:pcs) wbBshp wwBshp bbBshp bwBshp bKnghts wKnghts = False
-    loop [] wbBshp wwBshp bbBshp bwBshp bKnghts wKnghts =
-      check wbBshp wwBshp bbBshp bwBshp bKnghts wKnghts
-    check False False False False 0 0 = True -- Only kings remain
-    check False False False False 1 0 = True -- White king vs black king and knight
-    check False False False False 0 1 = True -- Black king vs white king and knight
-    check True False True False 0 0 = True -- Opposing bishops on black squares
-    check False True False True 0 0 = True -- Opposing bishops on white squares
-    check wbBshp wwBshp bbBshp bwBshp bKnghts wKnghts =
-      sum (map fromEnum [wbBshp, wwBshp, bbBshp, bwBshp]) == 1 -- King vs King and bishop
 
 -- checks if a certain piece has a valid (AND LEGAL!) move
 hasLegalMove :: Board -> Position -> (Position, Piece) -> Bool
@@ -189,7 +159,6 @@ hasLegalMoves s@(State b t wc bc p) kingPos =
 endgameCheck :: State -> (Message, Maybe State) -> (Message, Maybe State)
 endgameCheck old (msg, Nothing) = (msg, Just old)
 endgameCheck old@(State _ ot _ _ _) (msg, Just new@(State b nt wc bc p))
-  | insufMaterial b = ("Draw by insufficient material", Nothing)
   | playerChecked = ("You may not leave your king in check", Just old)
   | not
      (hasLegalMoves
@@ -215,15 +184,12 @@ endgameCheck old@(State _ ot _ _ _) (msg, Just new@(State b nt wc bc p))
       (nt == White && whiteChecked) || (nt == Black && blackChecked)
 
 -- MAIN LOGIC
-      
-step :: State -> Command -> (Message, Maybe State)
-step s c =
-  case readMove c of
-    Just m@(Move from to) ->
-      endgameCheck
-        s
-        (update s m (pieceAt (board s) from) (pieceAt (board s) to))
-    _ -> ("Invalid command", Just s)
+
+step :: State -> Move -> (Message, Maybe State)
+step s m@(Move from to) =
+  endgameCheck
+    s
+    (update s m (pieceAt (board s) from) (pieceAt (board s) to))
 
 -- the 'main' update function
 update :: State -> Move -> Maybe Piece -> Maybe Piece -> (Message, Maybe State)
@@ -234,14 +200,3 @@ update s@(State b t wc bc p) m@(Move from to) (Just fromp@(Piece frp frk)) topie
   | not (validMove fromp m) = ("Invalid " ++ show frk ++ " move", Just s)
   | frk == Pawn = doPawnMove s m fromp topiece
   | otherwise = doMove s m fromp topiece
-
-main :: IO ()
-main = loop $ Just state0
-  where
-    loop Nothing = return ()
-    loop (Just s) = do
-      printState s
-      c <- getLine
-      let (m, ms) = step s c
-      putStrLn m
-      loop ms

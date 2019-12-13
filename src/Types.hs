@@ -5,7 +5,6 @@ module Types
   , PieceType(..)
   , Player(..)
   , Piece(..)
-  , showTile
   , nextPlayer
   , squareColor
   ) where
@@ -29,7 +28,7 @@ squareColor (x, y) =
 data BoardSide
   = QueenSide
   | KingSide
-  deriving (Enum, Eq, Ord, Show)
+  deriving (Eq, Enum)
 
 -- PIECETYPE
 data PieceType
@@ -39,21 +38,21 @@ data PieceType
   | Knight
   | Rook
   | Pawn
-  deriving (Read, Enum, Eq, Ord, Show)
+  deriving (Eq, Enum)
 
-kindShow :: PieceType -> String
-kindShow Pawn = "p"
-kindShow Rook = "r"
-kindShow Knight = "n"
-kindShow Bishop = "b"
-kindShow Queen = "q"
-kindShow King = "k"
+instance Show PieceType where
+  show Pawn = "P"
+  show Rook = "R"
+  show Knight = "N"
+  show Bishop = "B"
+  show Queen = "Q"
+  show King = "K"
 
 -- PLAYER
 data Player
   = Black
   | White
-  deriving (Eq, Show, Enum)
+  deriving (Eq, Enum, Show)
 
 nextPlayer :: Player -> Player
 nextPlayer Black = White
@@ -66,11 +65,3 @@ data Piece =
     , kind :: PieceType
     }
   deriving (Eq)
-
-instance Show Piece where
-  show (Piece Black r) = kindShow r
-  show (Piece White r) = map toUpper $ kindShow r
-
-showTile :: Maybe Piece -> String
-showTile Nothing = "."
-showTile (Just p) = show p
