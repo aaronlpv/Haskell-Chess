@@ -51,20 +51,22 @@ executable Chess
   main-is:             Main.hs
 
   -- Modules included in this executable, other than Main.
-  -- other-modules:
+  other-modules: AI Board Chess Move Position State Types Utils
 
   -- LANGUAGE extensions used by modules in this package.
   -- other-extensions:
 
   -- Other library packages from which modules are imported.
   build-depends:       base >=4.12 && <4.13,
-                       gloss,
-                       bmp,
-                       array
+                       gloss >= 1.13,
+                       bmp >= 1.2,
+                       array >= 0.5,
+                       parallel >= 3.2
+
+  ghc-options:         -O3 -threaded -with-rtsopts=-N
 
   -- Directories containing source files.
   hs-source-dirs:      src
 
   -- Base language which the package is written in.
   default-language:    Haskell2010
-

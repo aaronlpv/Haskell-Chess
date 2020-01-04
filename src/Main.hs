@@ -7,10 +7,9 @@ import Graphics.Gloss.Interface.IO.Interact
 
 import Board
 import Position
-import State
 import Types
-import Chess (step)
 import Move
+import AI
 
 windowSize :: Int
 windowSize = 856
@@ -38,46 +37,47 @@ loadSprites bmp = [loadSp 0, loadSp unit]
       | x <- [0,1 .. 7]
       ]
 
+spriteForPiece :: [[Picture]] -> Piece -> Picture
+spriteForPiece sprites (Piece p k) = (sprites !! fromEnum p) !! fromEnum k
+
 convertPosition :: Player -> Position -> Position
 convertPosition White p = p
 convertPosition Black (x,y) = (7-x, 7-y)
 
 displayState :: [[Picture]] -> GState -> Picture
-displayState sprites (Game (State b t _ _ _) _) =
+displayState sprites (Game s _) =
   Color black $
   Scale (funit / 2) (funit / 2) $
   Translate (-3.5) (-3.5) (pictures $ grid ++ pieces)
   where
     pieces =
       map
-        (\(pos, Piece p k) ->
-           case convertPosition t pos of (x,y) ->
-                                             Translate
-                                             (fromIntegral x)
-                                             (fromIntegral y)
-                                             ((sprites !! fromEnum p) !! fromEnum k))
-        (allPieces b)
+        (\(pos, piece) ->
+            case convertPosition (turn s) pos of (x,y) -> Translate (fromIntegral x) (fromIntegral y) (spriteForPiece sprites piece))
+        (allPieces (board s))
     grid =
       [ Translate (fromIntegral x) (fromIntegral y) (rectangleSolid 1 1)
       | x <- [0,1 .. 7]
       , y <- [0,1 .. 7]
-      , (odd x == odd y) == (t == White)
+      , (odd x == odd y) == (turn s == White)
       ]
 displayState sprites PickPlayer =
   Pictures
   [Translate (-fwindowSize/4.5) (fwindowSize/5) $ Text "Chess",
    Scale 0.5 0.5 $ Translate (-fwindowSize/2.15) (-fwindowSize/6) $ Text "Pick a side",
-   Translate (-fwindowSize/5) (-fwindowSize/4) $ Scale (funit/2) (funit/2) $ (sprites !! fromEnum White) !! fromEnum King,
-   Translate (fwindowSize/5) (-fwindowSize/4) $ Scale (funit/2) (funit/2) $ (sprites !! fromEnum Black) !! fromEnum King]
+   Translate (-fwindowSize/5) (-fwindowSize/4) $ Scale (funit/2) (funit/2) $ spriteForPiece sprites (Piece White King),
+   Translate (fwindowSize/5) (-fwindowSize/4) $ Scale (funit/2) (funit/2) $ spriteForPiece sprites (Piece Black King)]
 displayState _ _ = error "not implemented" -- FIXME
 
 handleEvent :: Event -> GState -> GState
-handleEvent (EventKey (MouseButton LeftButton) Up _ (x,y)) state@(Game s@(State b t _ _ _) from)
-  = case from of Nothing -> if pieceAtOwnedBy b t cpos then Game s (Just cpos) else state
+handleEvent (EventKey (MouseButton LeftButton) Up _ (x,y)) state@(Game s from)
+  = case from of Nothing -> if pieceAtOwnedBy (board s) (turn s) cpos then Game s (Just cpos) else state
                  Just fromPos ->
-                   let game = fromJust $ snd $ step s (Move fromPos cpos) in
-                     Game game Nothing
-  where cpos = convertPosition t (floor ((x + fwindowSize / 2) / funit * 2),
+                   if (Move fromPos cpos) `elem` (legalMoves s)
+                   then let ns = (stateDoMove s (Move fromPos cpos)) in
+                     Game (stateDoMove ns (aiMove (bestForPlayer (turn ns) (scoreTree (doAI ns) 2)))) Nothing
+                   else Game s Nothing
+  where cpos = convertPosition (turn s) (floor ((x + fwindowSize / 2) / funit * 2),
                                   floor ((y + fwindowSize / 2) / funit * 2))
 
 handleEvent (EventKey (MouseButton LeftButton) Up _ _) PickPlayer = gstate0

@@ -5,6 +5,10 @@ module Move
   , validMoves
   , validPawnMove
   , validCapture
+  , captureRays
+  , isCastling
+  , castleMove
+  , castleRookMove
   ) where
 
 import Position
@@ -91,3 +95,30 @@ validCapture :: Piece -> Move -> Bool
 validCapture p@(Piece _ Pawn) m@(Move (x1, y1) (x2, y2)) =
   validMove p m && x1 /= x2
 validCapture p m = validMove p m
+
+-- what positions have to be looked at to see if a king is in check
+-- contains lists of 'rays' as only the first piece encountered on each ray matters
+captureRays :: Position -> [[Position]]
+captureRays from = raysFrom from ++ validMoves (Piece White Knight) from
+
+-- check if a move is a valid castle move, returns the side if it is
+isCastling :: Move -> Maybe BoardSide
+isCastling (Move (4, 7) (2, 7)) = Just QueenSide
+isCastling (Move (4, 7) (6, 7)) = Just KingSide
+isCastling (Move (4, 0) (2, 0)) = Just QueenSide
+isCastling (Move (4, 0) (6, 0)) = Just KingSide
+isCastling _ = Nothing
+
+-- the move the rook has to make in every castling situation
+castleMove :: Player -> BoardSide -> Move
+castleMove Black QueenSide = Move (4, 7) (2, 7)
+castleMove Black KingSide = Move (4, 7) (6, 7)
+castleMove White QueenSide = Move (4, 0) (2, 0)
+castleMove White KingSide = Move (4, 0) (6, 0)
+
+-- the move the rook has to make in every castling situation
+castleRookMove :: Player -> BoardSide -> Move
+castleRookMove Black QueenSide = Move (0, 7) (3, 7)
+castleRookMove Black KingSide = Move (7, 7) (5, 7)
+castleRookMove White QueenSide = Move (0, 0) (3, 0)
+castleRookMove White KingSide = Move (7, 0) (5, 0)

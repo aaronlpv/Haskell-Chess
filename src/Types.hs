@@ -6,23 +6,14 @@ module Types
   , Player(..)
   , Piece(..)
   , nextPlayer
-  , squareColor
   ) where
 
-import Data.Char (toUpper)
 import Position
 
 -- This file contains all types which are too small to deserve their own file
 type Command = String
 
 type Message = String
-
--- color of that tile on the board
-squareColor :: Position -> Player
-squareColor (x, y) =
-  if even x == even y
-    then Black
-    else White
 
 -- BOARDSIDE
 data BoardSide
@@ -64,4 +55,4 @@ data Piece =
     { player :: Player
     , kind :: PieceType
     }
-  deriving (Eq)
+  deriving (Show, Eq)

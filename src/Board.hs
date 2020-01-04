@@ -4,10 +4,7 @@ module Board
   , allPieces
   , board0
   , applyMove
-  , applyMoves
-  , applyMovesAndChanges
   , clearPath
-  , getKingPos
   , pieceAtOwnedBy
   ) where
 
@@ -71,7 +68,16 @@ moveToChange b (Move from to) =
     promote _ p = p
 
 applyMove :: Board -> Move -> Board
-applyMove b m = changeBoard b (moveToChange b m)
+applyMove b m@(Move from@(fx, fy) to@(tx, ty))
+  | kind fPiece == King =
+    case isCastling m of
+      Just side -> applyMoves b [castleRookMove (player (fromJust (pieceAt b from))) side, m]
+      _ -> applyMoves b [m]
+  | kind fPiece == Pawn && (not (sameCol from to)) && tPiece == Nothing =
+    applyMovesAndChanges b [m] [((tx, fy), Nothing)]
+  | otherwise = applyMoves b [m]
+  where fPiece = fromJust $ pieceAt b from
+        tPiece = pieceAt b to
 
 applyMoves :: Board -> [Move] -> Board
 applyMoves b ms = changeBoard b (concatMap (moveToChange b) ms)
@@ -83,21 +89,6 @@ applyMovesAndChanges b ms cs =
 -- checks if there is a clear path between 2 positions
 clearPath :: Board -> Position -> Position -> Bool
 clearPath b from to = all (isNothing . pieceAt b) (between from to)
-
--- gets the positions of both kings
-getKingPos :: Board -> (Position, Position)
-getKingPos b = loop (allPieces b) Nothing Nothing
-  where
-    loop ::
-         [(Position, Piece)]
-      -> Maybe Position
-      -> Maybe Position
-      -> (Position, Position)
-    loop _ (Just x) (Just y) = (x, y)
-    loop ((pos, Piece Black King):pcs) x _ = loop pcs x (Just pos)
-    loop ((pos, Piece White King):pcs) _ y = loop pcs (Just pos) y
-    loop (_:pcs) x y = loop pcs x y
-    loop _ _ _ = error "Not enough kings on board"
 
 pieceAtOwnedBy :: Board -> Player -> Position -> Bool
 pieceAtOwnedBy b pl pos =
