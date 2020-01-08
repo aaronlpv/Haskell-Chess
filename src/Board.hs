@@ -1,6 +1,7 @@
 module Board
   ( Board
   , pieceAt
+  , justPieceAt
   , allPieces
   , board0
   , applyMove
@@ -9,7 +10,7 @@ module Board
   ) where
 
 import Data.Array
-import Data.Maybe (fromJust, isJust, isNothing)
+import Data.Maybe (fromJust, isJust, isNothing, maybeToList)
 
 import Move
 import Position
@@ -27,12 +28,16 @@ posToIdx (x, y) = y * 8 + x
 pieceAt :: Board -> Position -> Maybe Piece
 pieceAt b p = b ! posToIdx p
 
+justPieceAt :: Board -> Position -> Piece
+justPieceAt b = fromJust . pieceAt b
+
 -- the association list of all pieces on the board and their positions
 allPieces :: Board -> [(Position, Piece)]
 allPieces b =
-  map (\(pos, piece) -> (pos, fromJust piece)) $
-  filter (\(_, piece) -> isJust piece) $
-  map (\pos -> (pos, pieceAt b pos)) [(x, y) | y <- [0 .. 7], x <- [0 .. 7]]
+  [((x, y), piece) |
+   x <- [0..7],
+   y <- [0..7],
+   piece <- maybeToList (pieceAt b (x,y))]
 
 -- the order of the pieces
 order :: [PieceType]
@@ -62,7 +67,7 @@ moveToChange b (Move from to) =
   [(from, Nothing), (to, promote to (pieceAt b from))]
   where
     promote (x, y) p@(Just (Piece c Pawn)) =
-      if y `elem` [0, 7]
+      if shouldPromote to
         then Just (Piece c Queen)
         else p
     promote _ p = p
@@ -71,12 +76,12 @@ applyMove :: Board -> Move -> Board
 applyMove b m@(Move from@(fx, fy) to@(tx, ty))
   | kind fPiece == King =
     case isCastling m of
-      Just side -> applyMoves b [castleRookMove (player (fromJust (pieceAt b from))) side, m]
+      Just side -> applyMoves b [castleRookMove (player fPiece) side, m]
       _ -> applyMoves b [m]
-  | kind fPiece == Pawn && (not (sameCol from to)) && tPiece == Nothing =
+  | kind fPiece == Pawn && not (sameCol from to) && isNothing tPiece =
     applyMovesAndChanges b [m] [((tx, fy), Nothing)]
   | otherwise = applyMoves b [m]
-  where fPiece = fromJust $ pieceAt b from
+  where fPiece = justPieceAt b from
         tPiece = pieceAt b to
 
 applyMoves :: Board -> [Move] -> Board

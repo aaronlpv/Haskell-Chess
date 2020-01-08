@@ -1,12 +1,12 @@
-module AI(AITree(..), State(..), state0, stateDoMove, legalMoves, stateKingPos, doAI, findByMove, scoreTree, bestForPlayer) where
+module AI(AITree(..), State(..), state0, stateDoMove, legalMoves, stateKingPos, doAI, findByMove, scoreTree, bestForPlayer, isChecked, appendHistory) where
 import Types
 import Board
 import Position
 import Chess
 import Move
 
-import Data.Maybe (fromJust, isNothing, isJust)
-import Data.List (find)
+import Data.Maybe (fromJust, isNothing, isJust, maybeToList)
+import Data.List (find, intercalate, delete)
 import Control.Parallel (par, pseq)
 
 data AITree = AINode {
@@ -26,11 +26,11 @@ data State = State { board :: Board
                    , turn :: Player
                    , whiteKing :: KingInfo
                    , blackKing :: KingInfo
-                   , history :: [Move]
+                   , enPassant :: Maybe Int
                    }
 
 state0 :: State
-state0 = State board0 White (KingInfo (4,0) True True) (KingInfo (4,7) True True) []
+state0 = State board0 White (KingInfo (4,0) True True) (KingInfo (4,7) True True) Nothing
 
 stateKingInfo :: Player -> State -> KingInfo
 stateKingInfo p = if p == Black then blackKing else whiteKing
@@ -49,7 +49,7 @@ updateKingInfo s (Move from to) =
       else
       (updateCastlePerms wKing White, KingInfo to False False)
   else (updateCastlePerms wKing White, updateCastlePerms bKing Black)
-  where piece = fromJust $ pieceAt (board s) from
+  where piece = justPieceAt (board s) from
         wKing = whiteKing s
         bKing = blackKing s
         doesNotAffect pos = pos `notElem` [from, to]
@@ -60,7 +60,7 @@ updateKingInfo s (Move from to) =
 
 filterMoves :: Board -> Position -> [[Position]] -> [[Position]]
 filterMoves b p = filter (not . null) . map f
-  where play = player (fromJust (pieceAt b p))
+  where play = player (justPieceAt b p)
         f (m:ms) = case pieceAt b m of
           Nothing -> m:f ms
           Just (Piece pl _) -> if play == pl then [] else [m]
@@ -72,7 +72,7 @@ castlingAllowed state bs =
   kinfoMayCastle bs (stateKingInfo player state) &&
   clearPath (board state) (px1, y) (px2, y) &&
   not (any (isThreatened (board state) player) (between (bx1, y) (bx2, y)))
-  where player = (turn state)
+  where player = turn state
         y = if player == White then 0 else 7
         (px1, px2, bx1, bx2) = if bs == QueenSide then (0, 4, 1, 5) else (4, 7, 3, 7)
 
@@ -93,7 +93,7 @@ legalMovesForPiece s (pos, piece@(Piece p k)) = filterLegalMoves s moves
 leavesInCheck :: State -> Move -> Bool
 leavesInCheck s m@(Move from to) =
   isThreatened (applyMove (board s) m) (turn s)
-  (if kind (fromJust (pieceAt (board s) from)) == King then to else stateKingPos (turn s) s)
+  (if kind (justPieceAt (board s) from) == King then to else stateKingPos (turn s) s)
 
 -- is a certain tile threatened by pl's opponent
 -- does not take en passant into account
@@ -119,8 +119,9 @@ scoreForType Queen = 9
 scoreForType King = 0
 
 stateDoMove :: State -> Move -> State
-stateDoMove s@(State b t w bl h) m =
-  State (applyMove b m) (nextPlayer t) wKing bKing (m:h)
+stateDoMove s@(State b t w bl h) m@(Move from to) =
+  State (applyMove b m) (nextPlayer t) wKing bKing
+  (if pawnOpener m && kind (justPieceAt b from) == Pawn then Just (fst from) else Nothing)
   where (wKing, bKing) = updateKingInfo s m
 
 scoreForPiece :: Piece -> Int
@@ -131,8 +132,18 @@ scoreBoard :: Board -> Int
 scoreBoard = sum . map (scoreForPiece . snd) . allPieces
 
 legalMoves :: State -> [Move]
-legalMoves s = specials ++ (concatMap (legalMovesForPiece s) $ filter (\(pos, Piece p k) -> p == turn s) (allPieces (board s)))
-  where specials = [castleMove (turn s) side | side <- [QueenSide, KingSide], castlingAllowed s side]
+legalMoves s = castling ++ passants ++ concatMap (legalMovesForPiece s) (filter (\(pos, Piece p k) -> p == turn s) (allPieces (board s)))
+  where castling = [castleMove (turn s) side | side <- [QueenSide, KingSide], castlingAllowed s side]
+        (fromy, toy) = if (turn s) == White then (4, 5) else (3, 2)
+        passants = [Move from to |
+                    epx <- maybeToList (enPassant s),
+                    x <- [epx-1, epx+1],
+                    x <= 7 && x >= 0,
+                    let (from, to) = ((x, fromy), (epx, toy)),
+                    case pieceAt (board s) from of Nothing -> False
+                                                   Just (Piece p k) -> k == Pawn && p == (turn s),
+                    not (leavesInCheck s (Move from to))]
+
 
 doAI :: State -> [AITree]
 doAI state = map (\m -> let ns = stateDoMove state m in
@@ -157,15 +168,110 @@ scoreNode maxDepth depth (AINode state move succ)
 
 scoreTree :: [AITree] -> Int -> [(AITree, Int)]
 scoreTree tree maxDepth =
-  map (\n -> (n, scoreNode maxDepth 0 n)) tree
+  pmap (\n -> (n, scoreNode maxDepth 0 n)) tree
+  where nodeScore node = scoreNode maxDepth 0 node
 
 bestForPlayer :: Player -> [(AITree, Int)] -> AITree
-bestForPlayer p = fst . foldr1 (\a@(at, as) b@(bt, bs) -> if as `comp` bs then a else b)
-  where comp = if p == White then (>) else (<)
+bestForPlayer p = fst . foldr1 (\a@(at, as) b@(bt, bs) -> if as `cmp` bs then a else b)
+  where cmp = if p == White then (>) else (<)
 
 pmap :: (a -> b) -> [a] -> [b]
 pmap f [] = []
 pmap f (x:xs) =
-    let head = f x
-        rest = pmap f xs
-    in rest `par` (head `pseq` head:rest)
+  let hd = f x
+      rest = pmap f xs
+  in rest `par` (hd `pseq` hd:rest)
+
+-- Persistence
+
+disambiguate :: Board -> Piece -> Move -> [Move] -> String
+disambiguate board pc move@(Move from to) moves
+  | null noDis = ""
+  | null disByFile = file from
+  | null disByRank = rank from
+  | otherwise = square from
+  where noDis = filterPieceTo board pc to moves
+        disByFile = filter (\m@(Move f t) -> fst f == fst from) noDis
+        disByRank = filter (\m@(Move f t) -> snd f == snd from) noDis
+
+filterPieceTo :: Board -> Piece -> Position -> [Move] -> [Move]
+filterPieceTo board pc dest =
+  filter (\(Move from to) -> to == dest &&
+           case pieceAt board to of Just otherpc -> pc == otherpc
+                                    _ -> False)
+
+annotateMove :: Board -> Move -> [Move] -> String
+annotateMove board move@(Move from to) alts
+  | kind fPiece == King && isJust castling =
+    case castling of Just QueenSide -> "0-0-0"
+                     Just KingSide -> "0-0"
+  | otherwise =
+    disamb ++ show (kind fPiece) ++ captureX ++ square to ++ pawn
+   where fPiece = justPieceAt board from
+         isCapture = isJust (pieceAt board to)
+         castling = isCastling move
+         disamb = disambiguate board fPiece move alts
+         captureX = if isCapture then "x" else ""
+         pawnEP = if not (sameCol from to) && not isCapture then "e.p." else ""
+         pawnProm = if shouldPromote to then "=Q" else ""
+         pawn = if kind fPiece == Pawn then pawnEP ++ pawnProm else ""
+
+maxDepth :: Int
+maxDepth = 2
+
+checkIndicator :: Bool -> Bool -> String
+checkIndicator checked hasMoves
+  | checked && hasMoves = "+"
+  | checked = "#"
+  | otherwise = ""
+
+winIndicator :: Player -> String
+winIndicator White = "1-0"
+winIndicator Black = "0-1"
+
+treeToString :: State -> [AITree] -> String
+treeToString = treeToStringRec 0
+
+treeToStringRec :: Int -> State -> [AITree] -> String
+treeToStringRec depth s t
+  | null t =
+    if checked then winIndicator (turn s) else "½-½"
+  | depth <= maxDepth =
+    intercalate ", " $ map (annotator depth s (map aiMove t)) t
+  | otherwise = ""
+  where checked = isChecked s (turn s)
+
+annotateState :: State -> [Move] -> AITree -> String
+annotateState prevState allMoves node =
+  annotateMove (board prevState) move (delete move allMoves) ++
+  checkIndicator (isChecked state (turn state)) (not (null succs))
+  where move = aiMove node
+        state = aiState node
+        succs = aiSucc node
+
+force :: [a] -> [a]
+force (x:xs) = x `seq` (xs `seq` (x:xs))
+force [] = []
+
+appendHistory :: String -> State -> [AITree] -> AITree -> String
+appendHistory str state alts chosen = force (str ++ sep ++ annotation)
+  where sep = if null str then "" else ", "
+        annotation = annotateState state (map aiMove alts) chosen
+
+annotator :: Int -> State -> [Move] -> AITree -> String
+annotator depth prevState allMoves node =
+  annotateMove (board prevState) move (delete move allMoves) ++
+    checkIndicator (isChecked state (turn state)) (not (null succs)) ++
+    "(" ++ treeToStringRec (depth + 1) state succs ++ ")"
+    where move = aiMove node
+          state = aiState node
+          succs = aiSucc node
+
+file :: Position -> String
+file (x,y) = [toEnum (fromEnum 'a' + x)]
+
+rank :: Position -> String
+rank (x,y) = [toEnum (fromEnum '1' + y)]
+
+square :: Position -> String
+square pos = file pos ++ rank pos

@@ -9,6 +9,7 @@ module Move
   , isCastling
   , castleMove
   , castleRookMove
+  , shouldPromote
   ) where
 
 import Position
@@ -18,6 +19,9 @@ import Utils
 data Move =
   Move Position Position
   deriving (Eq, Show)
+
+shouldPromote :: Position -> Bool
+shouldPromote (x,y) = y `elem` [0,7]
 
 -- checks if a move is only one tile away (also diagonally)
 oneStep :: Move -> Bool

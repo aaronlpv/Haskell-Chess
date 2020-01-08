@@ -19,7 +19,7 @@ type Message = String
 data BoardSide
   = QueenSide
   | KingSide
-  deriving (Eq, Enum)
+  deriving (Show, Eq, Enum)
 
 -- PIECETYPE
 data PieceType
@@ -29,10 +29,10 @@ data PieceType
   | Knight
   | Rook
   | Pawn
-  deriving (Eq, Enum)
+  deriving (Eq, Enum, Read)
 
 instance Show PieceType where
-  show Pawn = "P"
+  show Pawn = ""
   show Rook = "R"
   show Knight = "N"
   show Bishop = "B"
