@@ -8,6 +8,7 @@ import Board
 import Position
 import Types
 import Move
+import Chess
 import AI
 
 windowSize :: Int
