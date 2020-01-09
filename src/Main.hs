@@ -10,7 +10,9 @@ import Types
 import Move
 import Chess
 import AI
+import Utils
 
+-- changing this scales everything
 windowSize :: Int
 windowSize = 856
 
@@ -22,6 +24,21 @@ unit = 213
 
 funit :: Float
 funit = fromIntegral unit
+
+pieceScale :: Float
+pieceScale = fwindowSize / 8
+
+scalePiece :: Picture -> Picture
+scalePiece = Scale pieceScale pieceScale
+
+scaleText :: Picture -> Picture
+scaleText = Scale (fwindowSize / 1712) (fwindowSize / 1712)
+
+scaleTitle :: Picture -> Picture
+scaleTitle = Scale (fwindowSize / 856) (fwindowSize / 856)
+
+relTranslate :: Float -> Float -> Picture -> Picture
+relTranslate x y = Translate (fwindowSize / x) (fwindowSize / y)
 
 data GState = PickPlayer | Game State [AITree] String (Maybe Position) | GameOver State String
 
@@ -44,34 +61,35 @@ convertPosition Black (x,y) = (7-x, 7-y)
 displayState :: [[Picture]] -> State -> Picture
 displayState sprites s =
   Color black $
-  Scale (funit / 2) (funit / 2) $
+  scalePiece $
   Translate (-3.5) (-3.5) (pictures $ grid ++ pieces)
   where
-    pieces =
-      map
-        (\(pos, piece) ->
-            case convertPosition (turn s) pos of (x,y) -> Translate (fromIntegral x) (fromIntegral y) (spriteForPiece sprites piece))
-        (allPieces (board s))
     grid =
       [ Translate (fromIntegral x) (fromIntegral y) (rectangleSolid 1 1)
       | x <- [0,1 .. 7]
       , y <- [0,1 .. 7]
       , (odd x == odd y) == (turn s == White)
       ]
+    pieces =
+      map
+        (\(pos, piece) ->
+           let (x, y) = convertPosition (turn s) pos in
+            Translate (fromIntegral x) (fromIntegral y) (spriteForPiece sprites piece))
+        (allPieces (board s))
 
 displayGState :: [[Picture]] -> GState -> Picture
 displayGState sprites (Game s _ _ _) = displayState sprites s
 displayGState sprites PickPlayer =
   Pictures
-  [Translate (-fwindowSize/4.5) (fwindowSize/5) $ Text "Chess",
-   Scale 0.5 0.5 $ Translate (-fwindowSize/2.15) (-fwindowSize/6) $ Text "Pick a side",
-   Translate (-fwindowSize/5) (-fwindowSize/4) $ Scale (funit/2) (funit/2) $ spriteForPiece sprites (Piece White King),
-   Translate (fwindowSize/5) (-fwindowSize/4) $ Scale (funit/2) (funit/2) $ spriteForPiece sprites (Piece Black King)]
+  [relTranslate (-4.5) 5 $ scaleTitle (Text "Chess"),
+   relTranslate (-4.5) (-20) $ scaleText (Text "Pick a side"),
+   relTranslate (-5) (-4) $ scalePiece $ spriteForPiece sprites (Piece White King),
+   relTranslate 5 (-4) $ scalePiece $ spriteForPiece sprites (Piece Black King)]
 displayGState sprites (GameOver state msg) =
   Pictures
   [displayState sprites state,
-   Color (greyN 0.3) (rectangleSolid fwindowSize 100),
-   Translate (-180) (-25) $ Scale 0.5 0.5 $ Color white $ Text msg]
+   Color (greyN 0.3) (rectangleSolid fwindowSize (fwindowSize / 7)),
+   relTranslate (-4.5) (-30) $ scaleText $ Color white $ Text msg]
 
 execMove :: GState -> AITree -> GState
 execMove (Game state ai hist _) tree =
@@ -105,8 +123,9 @@ handleEvent (EventKey (MouseButton LeftButton) Up _ (x,y)) gstate@(Game s ai his
                    case findByMove ai (Move fromPos cpos) of
                      Just tree -> aiDoMove $ execMove gstate tree
                      Nothing -> Game s ai hist Nothing
-  where cpos = convertPosition (turn s) (floor ((x + fwindowSize / 2) / funit * 2),
-                                  floor ((y + fwindowSize / 2) / funit * 2))
+  where cpos = convertPosition (turn s)
+          (floor ((x + fwindowSize / 2) / pieceScale),
+           floor ((y + fwindowSize / 2) / pieceScale))
 
 handleEvent (EventKey (MouseButton LeftButton) Up _ (x,y)) PickPlayer =
   if x < 0 then game0 state0 else aiDoMove (game0 state0)
@@ -122,7 +141,7 @@ main = do
   interactIO
     (InWindow "Chess" (windowSize, windowSize) (10, 10))
     white
-    (Game state0 (doAI state0) "" Nothing)
+    PickPlayer --(Game state0 (doAI state0) "" Nothing)
     (return . displayGState sprites)
     (\e s -> return $ handleEvent e s)
     (\_ -> return ())
