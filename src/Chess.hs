@@ -1,4 +1,4 @@
-module Chess(state0, stateDoMove, legalMoves, KingInfo(..), State(..), isChecked) where
+module Chess(state0, stateDoMove, legalMoves, KingInfo(..), State(..)) where
 import Data.Maybe (fromJust, isNothing, isJust, maybeToList)
 
 import Board
@@ -14,13 +14,14 @@ data KingInfo = KingInfo { kingPos :: Position
 
 data State = State { board :: Board
                    , turn :: Player
+                   , isChecked :: Bool
                    , whiteKing :: KingInfo
                    , blackKing :: KingInfo
                    , enPassant :: Maybe Int
                    }
 
 state0 :: State
-state0 = State board0 White (KingInfo (4,0) True True) (KingInfo (4,7) True True) Nothing
+state0 = State board0 White False (KingInfo (4,0) True True) (KingInfo (4,7) True True) Nothing
 
 stateKingInfo :: Player -> State -> KingInfo
 stateKingInfo p = if p == Black then blackKing else whiteKing
@@ -109,11 +110,12 @@ isThreatened b pl pos =
     dangerous ((ppos, Just p@(Piece pl2 knd)):xs) =
       pl /= pl2 && validCapture p (Move ppos pos)
 
-isChecked :: State -> Player -> Bool
-isChecked s p = isThreatened (board s) p (stateKingPos p s)
-
 stateDoMove :: State -> Move -> State
-stateDoMove s@(State b t w bl h) m@(Move from to) =
-  State (applyMove b m) (nextPlayer t) wKing bKing
+stateDoMove s@(State b t ch w bl h) m@(Move from to) =
+  State newBoard newPlayer check wKing bKing
   (if pawnOpener m && kind (justPieceAt b from) == Pawn then Just (fst from) else Nothing)
   where (wKing, bKing) = updateKingInfo s m
+        newBoard = (applyMove b m)
+        newPlayer = (nextPlayer t)
+        check = isThreatened newBoard newPlayer
+                (kingPos (if newPlayer == White then wKing else bKing))

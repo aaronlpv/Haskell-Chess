@@ -85,7 +85,7 @@ aiDoMove s = s
 
 endGameCheck :: GState -> GState
 endGameCheck (Game s ai hist from)
-  | null ai && isChecked s (turn s) =
+  | null ai && isChecked s =
     GameOver s (show (nextPlayer (turn s)) ++ " wins!")
   | null ai =
     GameOver s "Draw!"

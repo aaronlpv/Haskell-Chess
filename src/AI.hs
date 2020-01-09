@@ -51,7 +51,7 @@ pmap f (x:xs) =
 scoreNode :: Int -> AITree -> Int
 scoreNode depth (AINode state move succ)
   | null succ =
-    if isChecked state (turn state) then
+    if isChecked state then
       infinity depth
     else 0
   | depth >= maxDepth =
@@ -124,12 +124,12 @@ treeToStringRec depth s t
   | depth < maxDepth =
     intercalate ", " $ map (annotator depth s (map aiMove t)) t
   | otherwise = ""
-  where checked = isChecked s (turn s)
+  where checked = isChecked s
 
 annotateState :: State -> [Move] -> AITree -> String
 annotateState prevState allMoves node =
   annotateMove (board prevState) move (delete move allMoves) ++
-  checkIndicator (isChecked state (turn state)) (not (null succs))
+  checkIndicator (isChecked state) (not (null succs))
   where move = aiMove node
         state = aiState node
         succs = aiSucc node
@@ -146,7 +146,7 @@ appendHistory str state alts chosen = force (str ++ sep ++ annotation)
 annotator :: Int -> State -> [Move] -> AITree -> String
 annotator depth prevState allMoves node =
   annotateMove (board prevState) move (delete move allMoves) ++
-    checkIndicator (isChecked state (turn state)) (not (null succs)) ++
+    checkIndicator (isChecked state) (not (null succs)) ++
     "(" ++ treeToStringRec (depth + 1) state succs ++ ")"
     where move = aiMove node
           state = aiState node
