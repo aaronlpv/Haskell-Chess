@@ -82,14 +82,14 @@ legalMovesForPiece s (pos, piece@(Piece p k)) = filterLegalMoves s moves
 legalMoves :: State -> [Move]
 legalMoves s = castling ++ passants ++ concatMap (legalMovesForPiece s) (filter (\(pos, Piece p k) -> p == turn s) (allPieces (board s)))
   where castling = [castleMove (turn s) side | side <- [QueenSide, KingSide], castlingAllowed s side]
-        (fromy, toy) = if (turn s) == White then (4, 5) else (3, 2)
+        (fromy, toy) = if turn s == White then (4, 5) else (3, 2)
         passants = [Move from to |
                     epx <- maybeToList (enPassant s),
                     x <- [epx-1, epx+1],
                     x <= 7 && x >= 0,
                     let (from, to) = ((x, fromy), (epx, toy)),
                     case pieceAt (board s) from of Nothing -> False
-                                                   Just (Piece p k) -> k == Pawn && p == (turn s),
+                                                   Just (Piece p k) -> k == Pawn && p == turn s,
                     not (leavesInCheck s (Move from to))]
 
 leavesInCheck :: State -> Move -> Bool

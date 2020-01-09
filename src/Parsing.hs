@@ -5,6 +5,8 @@ import Text.ParserCombinators.Parsec
 import Text.ParserCombinators.Parsec.Combinator
 import Text.ParserCombinators.Parsec.Char
 
+import Data.Maybe (maybe)
+
 
 data ParsedState = ParsedState [ParsedMove] [ParsedNode]
   deriving (Show)
@@ -18,15 +20,28 @@ data ParsedNext = MoreNodes [ParsedNode] | EndOfExploration | GameEnd
 data Disamb = Disamb (Maybe Int) (Maybe Int)
 
 data PawnExtra = PawnEnPassant | PawnPromotion
-  deriving (Show)
 
 data ParsedMove = ParsedMove Disamb PieceType Bool Position (Maybe PawnExtra) Bool | ParsedCastling BoardSide
-  deriving (Show)
+
+file :: Int -> String
+file x = [toEnum (fromEnum 'a' + x)]
+
+rank :: Int -> String
+rank y = [toEnum (fromEnum '1' + y)]
+
+square (x,y) = file x ++ rank y
 
 instance Show Disamb where
-  show (Disamb x y) = showMaybe x ++ showMaybe y
-    where showMaybe (Just a) = show a
-          showMaybe Nothing = ""
+  show (Disamb x y) = (maybe "" file x) ++ (maybe "" rank y)
+
+instance Show PawnExtra where
+  show PawnEnPassant = "e.p."
+  show PawnPromotion = "=Q"
+
+instance Show ParsedMove where
+  show (ParsedMove dis pc cap sq pe ch) =
+    show dis ++ show pc ++ (if cap then "x" else "") ++
+    square sq ++ maybe "" show pe ++ (if ch then "+" else "")
 
 parens :: Parser a -> Parser a
 parens = between (spaces >> char '(' >> spaces) (spaces >> char ')' >> spaces)
@@ -46,30 +61,28 @@ pSquare = do f <- pFile
              r <- pRank
              return (f, r)
 
-parsePiece :: Char -> PieceType
-parsePiece 'K' = King
-parsePiece 'Q' = Queen
-parsePiece 'R' = Rook
-parsePiece 'B' = Bishop
-parsePiece 'N' = Knight
-
 pNotPawn :: Parser PieceType
-pNotPawn = do c <- oneOf "KQRBN"
-              return (parsePiece c)
+pNotPawn = choice [char 'K' >> return King,
+                   char 'Q' >> return Queen,
+                   char 'R' >> return Rook,
+                   char 'B' >> return Bishop,
+                   char 'N' >> return Knight,
+                   return Pawn]
 
 pPiece :: Parser PieceType
 pPiece = spaces >> option Pawn pNotPawn
 
 pPawnExtra :: Parser (Maybe PawnExtra)
 pPawnExtra = spaces >>
-             (option Nothing $ choice [string "=Q" >> return (Just PawnPromotion),
-                                       string "e.p." >> return (Just PawnEnPassant)])
+             choice [string "=Q" >> return (Just PawnPromotion),
+                     string "e.p." >> return (Just PawnEnPassant),
+                     return Nothing]
 
 pCheck :: Parser Bool
-pCheck = spaces >> (option False $ (oneOf "+#" >> return True))
+pCheck = spaces >> option False (oneOf "+#" >> return True)
 
 pCapture :: Parser Bool
-pCapture = spaces >> (option False (char 'x' >> return True))
+pCapture = spaces >> option False (char 'x' >> return True)
 
 pEnd :: Parser ParsedNext
 pEnd = do spaces
@@ -77,9 +90,9 @@ pEnd = do spaces
           return GameEnd
 
 pDisamb :: Parser Disamb
-pDisamb = spaces >> choice [pSquare >>= (\(f, r) -> return (Disamb (Just f) (Just r))),
-                           pFile >>= (\s -> return (Disamb (Just s) Nothing)),
-                           pRank >>= (\r -> return (Disamb Nothing (Just r)))]
+pDisamb = spaces >> choice [try pSquare >>= (\(f, r) -> return (Disamb (Just f) (Just r))),
+                            pFile >>= (\s -> return (Disamb (Just s) Nothing)),
+                            pRank >>= (\r -> return (Disamb Nothing (Just r)))]
 
 pCastling :: Parser ParsedMove
 pCastling = do spaces
@@ -95,19 +108,23 @@ pStepRest dis = do pc <- pPiece
                    cap <- pCapture
                    sq <- pSquare
                    pe <- pPawnExtra
-                   chk <- pCheck
-                   return $ ParsedMove dis pc cap sq pe chk
+                   ch <- pCheck
+                   return $ ParsedMove dis pc cap sq pe ch
 
 pNodes :: Parser [ParsedNode]
 pNodes = sepBy1 pNode (spaces >> char ',' >> spaces)
 
 pNode :: Parser ParsedNode
 pNode = do step <- pStep
-           next <- parens $ option EndOfExploration (choice [pEnd, (pNodes >>= return . MoreNodes)])
+           next <- parens $ option EndOfExploration (choice [pEnd, MoreNodes <$> pNodes])
            return $ ParsedNode step next
 
 pState :: Parser ParsedState
 pState = do spaces
-            steps <- sepBy1 pStep (spaces >> char ',')
+            steps <- sepBy1 pStep (try (spaces >> char ',' >> spaces))
+            spaces
             nodes <- parens pNodes
             return $ ParsedState steps nodes
+
+parseDotChess :: String -> Either ParseError ParsedState
+parseDotChess = parse pState "(unknown)"

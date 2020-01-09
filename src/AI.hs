@@ -14,6 +14,10 @@ data AITree = AINode {
   aiMove :: Move,
   aiSucc :: [AITree] }
 
+-- max depth for exploration and saving
+maxDepth :: Int
+maxDepth = 3
+
 scoreForType :: PieceType -> Int
 scoreForType Pawn = 1
 scoreForType Knight = 3
@@ -37,8 +41,15 @@ doAI state = map (\m -> let ns = stateDoMove state m in
 findByMove :: [AITree] -> Move -> Maybe AITree
 findByMove tree move = find (\node -> aiMove node == move) tree
 
-scoreNode :: Int -> Int -> AITree -> Int
-scoreNode maxDepth depth (AINode state move succ)
+pmap :: (a -> b) -> [a] -> [b]
+pmap f [] = []
+pmap f (x:xs) =
+  let hd = f x
+      rest = pmap f xs
+  in rest `par` (hd `pseq` hd:rest)
+
+scoreNode :: Int -> AITree -> Int
+scoreNode depth (AINode state move succ)
   | null succ =
     if isChecked state (turn state) then
       infinity depth
@@ -46,25 +57,17 @@ scoreNode maxDepth depth (AINode state move succ)
   | depth >= maxDepth =
     scoreBoard (board state)
   | otherwise =
-    best (pmap (scoreNode maxDepth (depth + 1)) succ)
+    best (pmap (scoreNode (depth + 1)) succ)
     where (best, infinity) =
             if turn state == Black then (minimum, (maxBound -)) else (maximum, (minBound +))
 
-scoreTree :: [AITree] -> Int -> [(AITree, Int)]
-scoreTree tree maxDepth =
-  pmap (\n -> (n, scoreNode maxDepth 0 n)) tree
-  where nodeScore node = scoreNode maxDepth 0 node
+scoreTree :: [AITree] -> [(AITree, Int)]
+scoreTree tree =
+  pmap (\n -> (n, scoreNode 1 n)) tree
 
 bestForPlayer :: Player -> [(AITree, Int)] -> AITree
 bestForPlayer p = fst . foldr1 (\a@(at, as) b@(bt, bs) -> if as `cmp` bs then a else b)
   where cmp = if p == White then (>) else (<)
-
-pmap :: (a -> b) -> [a] -> [b]
-pmap f [] = []
-pmap f (x:xs) =
-  let hd = f x
-      rest = pmap f xs
-  in rest `par` (hd `pseq` hd:rest)
 
 -- Persistence
 
@@ -100,8 +103,6 @@ annotateMove board move@(Move from to) alts
          pawnProm = if shouldPromote to then "=Q" else ""
          pawn = if kind fPiece == Pawn then pawnEP ++ pawnProm else ""
 
-maxDepth :: Int
-maxDepth = 2
 
 checkIndicator :: Bool -> Bool -> String
 checkIndicator checked hasMoves
@@ -114,13 +115,13 @@ winIndicator White = "1-0"
 winIndicator Black = "0-1"
 
 treeToString :: State -> [AITree] -> String
-treeToString = treeToStringRec 0
+treeToString = treeToStringRec 1
 
 treeToStringRec :: Int -> State -> [AITree] -> String
 treeToStringRec depth s t
   | null t =
     if checked then winIndicator (turn s) else "½-½"
-  | depth <= maxDepth =
+  | depth < maxDepth =
     intercalate ", " $ map (annotator depth s (map aiMove t)) t
   | otherwise = ""
   where checked = isChecked s (turn s)

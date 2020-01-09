@@ -70,17 +70,17 @@ displayGState sprites PickPlayer =
 displayGState sprites (GameOver state msg) =
   Pictures
   [displayState sprites state,
-   Color (greyN 0.3) $ (rectangleSolid fwindowSize 100),
+   Color (greyN 0.3) (rectangleSolid fwindowSize 100),
    Translate (-180) (-25) $ Scale 0.5 0.5 $ Color white $ Text msg]
 
 execMove :: GState -> AITree -> GState
 execMove (Game state ai hist _) tree =
   endGameCheck $ Game (aiState tree) (aiSucc tree) hist Nothing--(appendHistory hist state ai tree) Nothing
-execMove _ _ = (error "Can only move in game")
+execMove _ _ = error "Can only move in game"
 
 aiDoMove :: GState -> GState
 aiDoMove game@(Game state ai hist _) =
-  execMove game (bestForPlayer (turn state) (scoreTree ai 2))
+  execMove game (bestForPlayer (turn state) (scoreTree ai))
 aiDoMove s = s
 
 endGameCheck :: GState -> GState
@@ -104,7 +104,7 @@ handleEvent (EventKey (MouseButton LeftButton) Up _ (x,y)) gstate@(Game s ai his
                  Just fromPos ->
                    case findByMove ai (Move fromPos cpos) of
                      Just tree -> aiDoMove $ execMove gstate tree
-                     Nothing -> (Game s ai hist Nothing)
+                     Nothing -> Game s ai hist Nothing
   where cpos = convertPosition (turn s) (floor ((x + fwindowSize / 2) / funit * 2),
                                   floor ((y + fwindowSize / 2) / funit * 2))
 
