@@ -34,10 +34,11 @@ justPieceAt b = fromJust . pieceAt b
 -- the association list of all pieces on the board and their positions
 allPieces :: Board -> [(Position, Piece)]
 allPieces b =
-  [((x, y), piece) |
-   x <- [0..7],
-   y <- [0..7],
-   piece <- maybeToList (pieceAt b (x,y))]
+  [ ((x, y), piece)
+  | x <- [0 .. 7]
+  , y <- [0 .. 7]
+  , piece <- maybeToList (pieceAt b (x, y))
+  ]
 
 -- the order of the pieces
 order :: [PieceType]
@@ -83,8 +84,9 @@ applyMove b m@(Move from@(fx, fy) to@(tx, ty))
   | kind fPiece == Pawn && not (sameCol from to) && isNothing tPiece =
     applyMovesAndChanges b [m] [((tx, fy), Nothing)]
   | otherwise = applyMoves b [m]
-  where fPiece = justPieceAt b from
-        tPiece = pieceAt b to
+  where
+    fPiece = justPieceAt b from
+    tPiece = pieceAt b to
 
 applyMoves :: Board -> [Move] -> Board
 applyMoves b ms = changeBoard b (concatMap (moveToChange b) ms)

@@ -22,7 +22,7 @@ data Move =
 
 -- should a pawn arriving at a pos be promoted
 shouldPromote :: Position -> Bool
-shouldPromote (x,y) = y `elem` [0,7]
+shouldPromote (x, y) = y `elem` [0, 7]
 
 -- checks if a move is only one tile away (also diagonally)
 oneStep :: Move -> Bool
