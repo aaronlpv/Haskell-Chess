@@ -72,6 +72,8 @@ moveToChange b (Move from to) =
         else p
     promote _ p = p
 
+-- apply a move
+-- also performs castling and en passant
 applyMove :: Board -> Move -> Board
 applyMove b m@(Move from@(fx, fy) to@(tx, ty))
   | kind fPiece == King =

@@ -4,7 +4,7 @@ import Data.Either (fromRight)
 import Graphics.Gloss
 import Graphics.Gloss.Interface.IO.Interact
 import Data.List (intercalate)
-import Data.Either (fromRight)
+import Control.DeepSeq
 
 import Board
 import Position
@@ -15,7 +15,7 @@ import AI
 import Utils
 import Parsing
 
-data GState = PickPlayer | Menu GState String | Game State [AITree] ![ParsedMove] (Maybe Position) | GameOver State String
+data GState = PickPlayer | Menu GState String | Game State [AITree] [ParsedMove] (Maybe Position) | GameOver State String
 
 -- changing this scales everything
 windowSize :: Int
@@ -105,10 +105,12 @@ displayGState sprites (GameOver state msg) =
    Color (greyN 0.3) (rectangleSolid fwindowSize (fwindowSize / 7)),
    relTranslate (-4.5) (-30) $ scaleText $ Color white $ Text msg]
 
+-- move annotation somehow still has a spaceleak, no clue why
+-- even not using nhist does not fix it, I do not understand
 execMove :: GState -> AITree -> [AITree] -> GState
 execMove (Game state ai hist _) tree alts =
-  force (show ann) `seq` endGameCheck $ Game (aiState tree) (aiSucc tree) (ann:hist) Nothing
-  where ann = annotateStep state tree alts
+  nhist `deepseq` endGameCheck $ Game (aiState tree) (aiSucc tree) nhist Nothing
+  where nhist = annotateStep state tree alts : hist
 execMove _ _ _ = error "Can only move in game"
 
 aiDoMove :: GState -> GState
@@ -124,6 +126,8 @@ endGameCheck (Game s ai hist from)
     GameOver s "Draw!"
 endGameCheck s = s
 
+-- initial game constructor
+-- space leak if inlined
 game0 :: State -> GState
 game0 state = Game state (doAI state) [] Nothing
 {-# NOINLINE game0 #-}
@@ -147,7 +151,7 @@ handleEvent (EventKey (MouseButton LeftButton) Up _ (x,y)) gstate@(Game s ai his
 
 handleEvent (EventKey (MouseButton LeftButton) Up _ (x,y)) PickPlayer =
   if x < 0 then game0 state0 else aiDoMove (game0 state0)
-handleEvent (EventKey (SpecialKey KeyEsc) Up _ (x,y)) gstate@(Game _ _ _ _) =
+handleEvent (EventKey (SpecialKey KeyEsc) Up _ (x,y)) gstate@Game{} =
   Menu gstate ""
 handleEvent (EventKey (SpecialKey KeyEsc) Up _ (x,y)) (Menu gstate _) =
   gstate
@@ -155,12 +159,13 @@ handleEvent _ s = s
 
 handleIOEvent :: Event -> GState -> IO GState
 handleIOEvent (EventKey (MouseButton LeftButton) Up _ (x,y)) (Menu gstate@(Game state tree hist _) _) =
-  do if y > 0 then do writeFile dotChessFilename $ gameToString gstate
-                      return (Menu gstate "Saved")
-     else do contents <- readFile dotChessFilename
-             let parsed@(ParsedState moves tree) = fromRight (error "bruh") $ parseDotChess dotChessFilename contents
-             putStrLn $ show moves
-             return (Menu (gameFromParse parsed) "Loaded")
+  if y > 0 then do writeFile dotChessFilename $ gameToString gstate
+                   return (Menu gstate "Saved")
+  else do contents <- parseDotChess dotChessFilename <$> readFile dotChessFilename
+          case contents of Left err -> do print err
+                                          return (Menu gstate "Error")
+                           Right parsed@(ParsedState moves tree) ->
+                             return (Menu (gameFromParse parsed) "Loaded")
 handleIOEvent e s = return $ handleEvent e s
 
 dotChessFilename :: String
@@ -172,8 +177,9 @@ gameToString (Game state tree hist _) =
 
 gameFromParse :: ParsedState -> GState
 gameFromParse (ParsedState moves nodes) =
-  (Game game (doAI game) (reverse moves) Nothing)
+  Game game tree (reverse moves) Nothing
   where game = applyAnnotated state0 moves
+        tree = aiFromParsed game nodes
 
 main = do
   bmp <-
@@ -187,5 +193,5 @@ main = do
     white
     PickPlayer --(Game state0 (doAI state0) "" Nothing)
     (return . displayGState sprites)
-    (\e s -> handleIOEvent e s)
+    handleIOEvent
     (\_ -> return ())

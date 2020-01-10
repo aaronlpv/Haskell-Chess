@@ -115,7 +115,7 @@ stateDoMove s@(State b t ch w bl h) m@(Move from to) =
   State newBoard newPlayer check wKing bKing
   (if pawnOpener m && kind (justPieceAt b from) == Pawn then Just (fst from) else Nothing)
   where (wKing, bKing) = updateKingInfo s m
-        newBoard = (applyMove b m)
-        newPlayer = (nextPlayer t)
+        newBoard = applyMove b m
+        newPlayer = nextPlayer t
         check = isThreatened newBoard newPlayer
                 (kingPos (if newPlayer == White then wKing else bKing))

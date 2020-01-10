@@ -20,6 +20,7 @@ data Move =
   Move Position Position
   deriving (Eq, Show)
 
+-- should a pawn arriving at a pos be promoted
 shouldPromote :: Position -> Bool
 shouldPromote (x,y) = y `elem` [0,7]
 
