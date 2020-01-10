@@ -45,6 +45,7 @@ scaleSmallText = Scale (fwindowSize / 3000) (fwindowSize / 3000)
 scaleTitle :: Picture -> Picture
 scaleTitle = Scale (fwindowSize / 856) (fwindowSize / 856)
 
+-- this is kind of hacky, would have been better to chain translates but oh well
 relTranslate :: Float -> Float -> Picture -> Picture
 relTranslate x y = Translate (fwindowSize / x) (fwindowSize / y)
 
@@ -184,7 +185,7 @@ gameFromParse (ParsedState moves nodes) =
 main = do
   bmp <-
     readBMP
-      "/home/aaron/Documents/univ/1MA/Func/assignments/chess/code/sprites.bmp"
+      "sprites.bmp"
   let sprites =
         loadSprites $
         bitmapDataOfBMP (fromRight (error "Sprites not found!") bmp)
