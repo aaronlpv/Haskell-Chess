@@ -171,19 +171,21 @@ handleEvent (EventKey (SpecialKey KeyEsc) Up _ (x, y)) (Menu gstate _) = gstate
 handleEvent _ s = s
 
 handleIOEvent :: Event -> GState -> IO GState
-handleIOEvent (EventKey (MouseButton LeftButton) Up _ (x, y)) (Menu gstate@(Game state tree hist _) _) =
-  if y > 0
-    then do
-      writeFile dotChessFilename $ gameToString gstate
-      return (Menu gstate "Saved")
-    else do
-      contents <- parseDotChess dotChessFilename <$> readFile dotChessFilename
-      case contents of
-        Left err -> do
-          print err
-          return (Menu gstate "Error")
-        Right parsed@(ParsedState moves tree) ->
-          return (Menu (gameFromParse parsed) "Loaded")
+handleIOEvent (EventKey (MouseButton LeftButton) Up _ (x, y)) (Menu gstate@(Game state tree hist _) _)
+  | y > 0 =
+    if null hist
+      then return (Menu gstate "Can't save")
+      else do
+        writeFile dotChessFilename $ gameToString gstate
+        return (Menu gstate "Saved")
+  | otherwise = do
+    contents <- parseDotChess dotChessFilename <$> readFile dotChessFilename
+    case contents of
+      Left err -> do
+        print err
+        return (Menu gstate "Error")
+      Right parsed@(ParsedState moves tree) ->
+        return (Menu (gameFromParse parsed) "Loaded")
 handleIOEvent e s = return $ handleEvent e s
 
 dotChessFilename :: String
