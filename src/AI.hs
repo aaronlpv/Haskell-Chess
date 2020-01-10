@@ -169,7 +169,7 @@ treeToStringRec depth state succs
     if isChecked state
       then winIndicator (turn state)
       else "½-½"
-  | depth < maxDepth = intercalate ", " $ map recurse succs
+  | depth <= maxDepth = intercalate ", " $ map recurse succs
   | otherwise = ""
   where
     recurse node =
