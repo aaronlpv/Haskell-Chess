@@ -1,3 +1,4 @@
+module Parsing (parseDotChess, file, rank, square, Disamb(..), PawnExtra(..), ParsedMove(..), CheckStatus(..), ParsedState(..)) where
 import Types
 import Position hiding (between)
 
@@ -19,9 +20,10 @@ data ParsedNext = MoreNodes [ParsedNode] | EndOfExploration | GameEnd
 
 data Disamb = Disamb (Maybe Int) (Maybe Int)
 
+data CheckStatus = NoCheck | Check | CheckMate
 data PawnExtra = PawnEnPassant | PawnPromotion
 
-data ParsedMove = ParsedMove Disamb PieceType Bool Position (Maybe PawnExtra) Bool | ParsedCastling BoardSide
+data ParsedMove = ParsedMove Disamb PieceType Bool Position (Maybe PawnExtra) CheckStatus | ParsedCastling BoardSide
 
 file :: Int -> String
 file x = [toEnum (fromEnum 'a' + x)]
@@ -38,10 +40,17 @@ instance Show PawnExtra where
   show PawnEnPassant = "e.p."
   show PawnPromotion = "=Q"
 
+instance Show CheckStatus where
+  show NoCheck = ""
+  show Check = "+"
+  show CheckMate = "#"
+
 instance Show ParsedMove where
   show (ParsedMove dis pc cap sq pe ch) =
     show dis ++ show pc ++ (if cap then "x" else "") ++
-    square sq ++ maybe "" show pe ++ (if ch then "+" else "")
+    square sq ++ maybe "" show pe ++ show ch
+  show (ParsedCastling QueenSide) = "0-0-0"
+  show (ParsedCastling KingSide) = "0-0"
 
 parens :: Parser a -> Parser a
 parens = between (spaces >> char '(' >> spaces) (spaces >> char ')' >> spaces)
@@ -78,8 +87,11 @@ pPawnExtra = spaces >>
                      string "e.p." >> return (Just PawnEnPassant),
                      return Nothing]
 
-pCheck :: Parser Bool
-pCheck = spaces >> option False (oneOf "+#" >> return True)
+pCheck :: Parser CheckStatus
+pCheck = spaces >>
+         choice [char '+' >> return Check,
+                 char '#' >> return CheckMate,
+                 return NoCheck]
 
 pCapture :: Parser Bool
 pCapture = spaces >> option False (char 'x' >> return True)
@@ -126,5 +138,5 @@ pState = do spaces
             nodes <- parens pNodes
             return $ ParsedState steps nodes
 
-parseDotChess :: String -> Either ParseError ParsedState
-parseDotChess = parse pState "(unknown)"
+parseDotChess :: String -> String -> Either ParseError ParsedState
+parseDotChess = parse pState
